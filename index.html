@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CICF OPS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- LOGIN OVERLAY -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-brand">
+      <span class="login-logo">◈</span>
+      <span>CICF OPS</span>
+    </div>
+    <p class="login-sub">Sistema de Gestão Interna</p>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="login-email" placeholder="utilizador@cicf.pt" autocomplete="email">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="login()">Entrar</button>
+    <div id="login-error" class="error-msg" style="display:none"></div>
+    <p class="login-brand-footer">CDI Portugal · Norte 2030</p>
+  </div>
+</div>
+
+<!-- APP SHELL -->
+<div id="app" style="display:none">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-logo">◈</span>
+      <span class="sidebar-title">CICF OPS</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item active" data-section="dashboard" onclick="goto('dashboard')">
+        <span class="nav-icon">◧</span>Dashboard
+      </a>
+      <a class="nav-item" data-section="vacations" onclick="goto('vacations')">
+        <span class="nav-icon">◫</span>Férias
+      </a>
+      <a class="nav-item" data-section="teammap" onclick="goto('teammap')">
+        <span class="nav-icon">◉</span>Mapa de Equipa
+      </a>
+      <a class="nav-item" data-section="purchases" onclick="goto('purchases')">
+        <span class="nav-icon">◈</span>Compras
+      </a>
+      <a class="nav-item" data-section="schedules" onclick="goto('schedules')">
+        <span class="nav-icon">◷</span>Horário
+      </a>
+      <a class="nav-item" data-section="timesheet" onclick="goto('timesheet')">
+        <span class="nav-icon">◳</span>Folha de Horas
+      </a>
+      <div class="nav-divider" id="admin-divider" style="display:none"></div>
+      <a class="nav-item admin-nav" data-section="approvals" onclick="goto('approvals')" id="nav-approvals" style="display:none">
+        <span class="nav-icon">◎</span>Aprovações
+        <span class="badge" id="pending-badge" style="display:none">0</span>
+      </a>
+      <a class="nav-item admin-nav" data-section="admin" onclick="goto('admin')" id="nav-admin" style="display:none">
+        <span class="nav-icon">◑</span>Admin
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-chip">
+        <div class="user-avatar" id="sidebar-avatar"></div>
+        <div class="user-info">
+          <div class="user-name" id="sidebar-name"></div>
+          <div class="user-role" id="sidebar-role"></div>
+        </div>
+      </div>
+      <button class="btn-icon" onclick="logout()" title="Sair">⏻</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main id="main">
+
+    <!-- DASHBOARD -->
+    <section id="section-dashboard" class="section">
+      <div class="section-header">
+        <h1>Dashboard</h1>
+        <div class="header-meta" id="dash-date"></div>
+      </div>
+      <div class="stats-grid" id="dash-stats"></div>
+      <div class="dash-grid">
+        <div class="card">
+          <div class="card-header"><h3>Férias Pendentes</h3></div>
+          <div id="dash-vacations"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Compras Pendentes</h3></div>
+          <div id="dash-purchases"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VACATIONS -->
+    <section id="section-vacations" class="section" style="display:none">
+      <div class="section-header">
+        <h1>Férias</h1>
+        <button class="btn btn-primary" onclick="showModal('modal-vacation')">+ Novo Pedido</button>
+      </div>
+      <div id="vacations-list"></div>
+    </section>
+
+    <!-- TEAM MAP -->
+    <section id="section-teammap" class="section" style="display:none">
+      <div class="section-header">
+        <h1>Mapa de Equipa</h1>
+        <div class="month-nav">
+          <button class="btn btn-ghost" onclick="changeMapMonth(-1)">‹</button>
+          <span id="map-month-label" class="month-label"></span>
+          <button class="btn btn-ghost" onclick="changeMapMonth(1)">›</button>
+        </div>
+      </div>
+      <div class="card">
+        <div id="team-map-container"></div>
+        <div class="map-legend">
+          <span class="legend-item"><span class="dot dot-approved"></span>Aprovadas</span>
+          <span class="legend-item"><span class="dot dot-pending"></span>Pendentes</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- PURCHASES -->
+    <section id="section-purchases" class="section" style="display:none">
+      <div class="section-header">
+        <h1>Compras</h1>
+        <button class="btn btn-primary" onclick="showModal('modal-purchase')">+ Novo Pedido</button>
+      </div>
+      <div id="purchases-list"></div>
+    </section>
+
+    <!-- SCHEDULES -->
+    <section id="section-schedules" class="section" style="display:none">
+      <div class="section-header">
+        <h1>Horário</h1>
+        <button class="btn btn-secondary" onclick="showModal('modal-schedule-change')">Pedir Alteração</button>
+      </div>
+      <div class="schedule-grid">
+        <div class="card" id="schedule-display">
+          <div class="card-header"><h3>Horário Atual</h3></div>
+          <div id="schedule-content"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Pedidos de Alteração</h3></div>
+          <div id="schedule-changes-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TIMESHEET -->
+    <section id="section-timesheet" class="section" style="display:none">
+      <div class="section-header">
+        <h1>Folha de Horas</h1>
+        <div class="ts-controls">
+          <select id="ts-user-select" onchange="loadTimesheet()" style="display:none"></select>
+          <div class="month-nav">
+            <button class="btn btn-ghost" onclick="changeTSMonth(-1)">‹</button>
+            <span id="ts-month-label" class="month-label"></span>
+            <button class="btn btn-ghost" onclick="changeTSMonth(1)">›</button>
+          </div>
+          <button class="btn btn-primary" onclick="showModal('modal-timesheet')">+ Registar</button>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <div id="ts-summary"></div>
+      </div>
+      <div class="card">
+        <div id="timesheet-list"></div>
+      </div>
+    </section>
+
+    <!-- APPROVALS (admin) -->
+    <section id="section-approvals" class="section" style="display:none">
+      <div class="section-header">
+        <h1>Aprovações Pendentes</h1>
+        <button class="btn btn-ghost" onclick="loadPending()">↺ Atualizar</button>
+      </div>
+      <div id="approvals-list"></div>
+    </section>
+
+    <!-- ADMIN -->
+    <section id="section-admin" class="section" style="display:none">
+      <div class="section-header"><h1>Administração</h1></div>
+      <div class="admin-tabs">
+        <button class="tab-btn active" onclick="switchAdminTab('users')">Colaboradores</button>
+        <button class="tab-btn" onclick="switchAdminTab('projects')">Projetos</button>
+        <button class="tab-btn" onclick="switchAdminTab('schedules-admin')">Horários</button>
+      </div>
+      <div id="admin-tab-users">
+        <div class="section-header" style="margin-top:20px;padding-top:0;border:none">
+          <span></span>
+          <button class="btn btn-primary" onclick="showModal('modal-user')">+ Novo Colaborador</button>
+        </div>
+        <div id="users-list"></div>
+      </div>
+      <div id="admin-tab-projects" style="display:none">
+        <div class="section-header" style="margin-top:20px;padding-top:0;border:none">
+          <span></span>
+          <button class="btn btn-primary" onclick="showModal('modal-project')">+ Novo Projeto</button>
+        </div>
+        <div id="projects-list"></div>
+      </div>
+      <div id="admin-tab-schedules-admin" style="display:none">
+        <div id="all-schedules-list"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- MODALS -->
+<div id="modal-overlay" onclick="closeModal()" style="display:none">
+  <div onclick="event.stopPropagation()">
+
+    <!-- Vacation modal -->
+    <div id="modal-vacation" class="modal" style="display:none">
+      <div class="modal-header"><h2>Pedido de Férias</h2><button onclick="closeModal()">✕</button></div>
+      <div class="form-group"><label>Data de Início</label><input type="date" id="vac-start"></div>
+      <div class="form-group"><label>Data de Fim</label><input type="date" id="vac-end"></div>
+      <div class="form-group"><label>Notas (opcional)</label><textarea id="vac-notes" rows="3"></textarea></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitVacation()">Submeter Pedido</button>
+      </div>
+    </div>
+
+    <!-- Purchase modal -->
+    <div id="modal-purchase" class="modal" style="display:none">
+      <div class="modal-header"><h2>Pedido de Compra</h2><button onclick="closeModal()">✕</button></div>
+      <div class="form-group"><label>Descrição *</label><input type="text" id="pur-desc" placeholder="ex: Filamento PLA 1kg"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Valor Estimado (€)</label><input type="number" id="pur-amount" step="0.01" placeholder="0.00"></div>
+        <div class="form-group"><label>Fornecedor</label><input type="text" id="pur-supplier" placeholder="ex: Amazon, LIDL"></div>
+      </div>
+      <div class="form-group"><label>Justificação *</label><textarea id="pur-justif" rows="3" placeholder="Para que serve? Qual o projeto?"></textarea></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitPurchase()">Submeter Pedido</button>
+      </div>
+    </div>
+
+    <!-- Schedule change modal -->
+    <div id="modal-schedule-change" class="modal modal-wide" style="display:none">
+      <div class="modal-header"><h2>Pedido de Alteração de Horário</h2><button onclick="closeModal()">✕</button></div>
+      <div class="schedule-form-grid" id="schedule-form-grid"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Vigência a partir de</label><input type="date" id="sch-effective"></div>
+        <div class="form-group"><label>Motivo</label><input type="text" id="sch-reason" placeholder="ex: Horário de verão"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitScheduleChange()">Submeter Pedido</button>
+      </div>
+    </div>
+
+    <!-- Timesheet modal -->
+    <div id="modal-timesheet" class="modal" style="display:none">
+      <div class="modal-header"><h2 id="ts-modal-title">Registar Horas</h2><button onclick="closeModal()">✕</button></div>
+      <input type="hidden" id="ts-edit-id">
+      <div class="form-row">
+        <div class="form-group"><label>Data *</label><input type="date" id="ts-date"></div>
+        <div class="form-group"><label>Horas *</label><input type="number" id="ts-hours" step="0.25" min="0.25" max="24" placeholder="8"></div>
+      </div>
+      <div class="form-group"><label>Projeto *</label>
+        <select id="ts-project"><option value="">Selecionar projeto...</option></select>
+      </div>
+      <div class="form-group"><label>Tarefa *</label><input type="text" id="ts-task" placeholder="ex: Reunião semanal CICF"></div>
+      <div class="form-group"><label>Campo personalizado</label><input type="text" id="ts-custom" placeholder="ex: Ref. atividade Norte 2030"></div>
+      <div class="form-group"><label>Notas</label><textarea id="ts-notes" rows="2"></textarea></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitTimesheet()">Guardar</button>
+      </div>
+    </div>
+
+    <!-- User modal -->
+    <div id="modal-user" class="modal" style="display:none">
+      <div class="modal-header"><h2>Novo Colaborador</h2><button onclick="closeModal()">✕</button></div>
+      <div class="form-row">
+        <div class="form-group"><label>Nome *</label><input type="text" id="usr-name"></div>
+        <div class="form-group"><label>Email *</label><input type="email" id="usr-email"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Password inicial</label><input type="text" id="usr-pwd" placeholder="cicf2024"></div>
+        <div class="form-group"><label>Função</label>
+          <select id="usr-role">
+            <option value="employee">Colaborador</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Departamento</label><input type="text" id="usr-dept" placeholder="ex: InGaming"></div>
+        <div class="form-group"><label>Email do gestor</label><input type="email" id="usr-mgr" placeholder="para onde vão os pedidos"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitUser()">Criar Colaborador</button>
+      </div>
+    </div>
+
+    <!-- Project modal -->
+    <div id="modal-project" class="modal" style="display:none">
+      <div class="modal-header"><h2>Novo Projeto</h2><button onclick="closeModal()">✕</button></div>
+      <div class="form-row">
+        <div class="form-group"><label>Nome do Projeto *</label><input type="text" id="proj-name" placeholder="ex: Maker Week 2026"></div>
+        <div class="form-group"><label>Código</label><input type="text" id="proj-code" placeholder="ex: MW26" style="text-transform:uppercase"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitProject()">Criar Projeto</button>
+      </div>
+    </div>
+
+    <!-- Schedule admin modal -->
+    <div id="modal-schedule-admin" class="modal modal-wide" style="display:none">
+      <div class="modal-header"><h2 id="sched-admin-title">Editar Horário</h2><button onclick="closeModal()">✕</button></div>
+      <input type="hidden" id="sched-admin-userid">
+      <div class="schedule-form-grid" id="schedule-admin-form-grid"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitScheduleAdmin()">Guardar Horário</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
