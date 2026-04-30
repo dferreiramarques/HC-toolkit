@@ -13,9 +13,18 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const DEFAULT_MANAGER_EMAIL = process.env.MANAGER_EMAIL || 'admin@cicf.pt';
 
 // ─── DATABASE ─────────────────────────────────────────────────────────────────
+if (!process.env.DATABASE_URL) {
+  console.error('⚠  DATABASE_URL não definida. Adiciona o PostgreSQL addon no Railway e certifica-te que a variável está ligada ao serviço.');
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+  ssl: process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('localhost')
+    ? { rejectUnauthorized: false }
+    : false,
+  connectionTimeoutMillis: 5000,
+  idleTimeoutMillis: 30000,
+  max: 10
 });
 
 // ─── EMAIL ────────────────────────────────────────────────────────────────────
@@ -651,9 +660,23 @@ app.get('*', (req, res) => {
 });
 
 // ─── START ────────────────────────────────────────────────────────────────────
-initDB().then(() => {
-  app.listen(PORT, () => console.log(`CICF OPS iniciado na porta ${PORT} — ${BASE_URL}`));
-}).catch(err => {
-  console.error('Erro ao inicializar BD:', err);
-  process.exit(1);
-});
+// Arrancar HTTP imediatamente (Railway health checks), depois inicializar BD com retry
+app.listen(PORT, () => console.log('CICF OPS a ouvir na porta ' + PORT));
+
+const startDB = async (attempt = 1) => {
+  try {
+    await initDB();
+    console.log('✓ Base de dados pronta — ' + BASE_URL);
+  } catch (err) {
+    const delay = Math.min(attempt * 3000, 30000);
+    console.error('✗ BD falhou (tentativa ' + attempt + '): ' + err.message);
+    if (attempt >= 10) {
+      console.error('Desistindo após 10 tentativas. Verifica DATABASE_URL no Railway.');
+      return;
+    }
+    console.log('  A tentar de novo em ' + (delay / 1000) + 's...');
+    setTimeout(() => startDB(attempt + 1), delay);
+  }
+};
+
+startDB();
