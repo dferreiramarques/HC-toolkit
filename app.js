@@ -552,35 +552,50 @@ async function loadPending() {
     }
     const icons={vacation:'📅',purchase:'🛒',schedule:'🕐'};
     const labels={vacation:'Férias',purchase:'Compra',schedule:'Horário'};
+
     el.innerHTML=`<div class="card"><div class="table-wrap"><table>
-      <thead><tr><th>Tipo</th><th>Colaborador</th><th>Detalhe</th><th>Submetido</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Tipo</th><th>Colaborador</th><th>Detalhe</th><th>Submetido</th><th>Decisão</th></tr></thead>
       <tbody>${pending.map(p=>{
-        let detail='', actions='';
-        if (p.type==='vacation') {
-          detail=`${fmtDate(p.start_date)} → ${fmtDate(p.end_date)} <span class="badge-days">${p.working_days||0}d</span>`;
-          actions=`<button class="btn btn-approve" onclick="decideVacation(${p.id},'approved')">✓ Aprovar</button>
-                   <button class="btn btn-reject"  onclick="promptRejectVacation(${p.id})">✗ Recusar</button>`;
-        }
-        if (p.type==='purchase') {
+        let detail='';
+        if (p.type==='vacation')
+          detail=`${fmtDate(p.start_date)} → ${fmtDate(p.end_date)} <span class="badge-days">${p.working_days||0}d úteis</span>`;
+        if (p.type==='purchase')
           detail=`${p.description}${p.amount?` — €${parseFloat(p.amount).toFixed(2)}`:''}`;
-          actions=`<button class="btn btn-approve" onclick="decidePurchase(${p.id},'approved')">✓ Aprovar</button>
-                   <button class="btn btn-reject"  onclick="decidePurchase(${p.id},'rejected')">✗ Recusar</button>`;
-        }
-        if (p.type==='schedule') {
+        if (p.type==='schedule')
           detail=p.reason||'Alteração de horário';
-          actions=`<button class="btn btn-approve" onclick="decideScheduleChange(${p.id},'approved')">✓ Aprovar</button>
-                   <button class="btn btn-reject"  onclick="decideScheduleChange(${p.id},'rejected')">✗ Recusar</button>`;
-        }
+
+        const selectId=`decision-${p.type}-${p.id}`;
+        const onchange = p.type==='vacation'
+          ? `onVacationDecision(${p.id},this.value)`
+          : p.type==='purchase'
+          ? `decidePurchase(${p.id},this.value)`
+          : `decideScheduleChange(${p.id},this.value)`;
+
         return `<tr>
           <td>${icons[p.type]} ${labels[p.type]}</td>
           <td class="fw-600">${p.user_name}</td>
           <td>${detail}</td>
           <td class="text-muted">${fmtDate(p.created_at)}</td>
-          <td class="td-actions">${actions}</td>
+          <td>
+            <select id="${selectId}" class="decision-select" onchange="${onchange}">
+              <option value="">— decidir —</option>
+              <option value="approved">✓ Aprovar</option>
+              <option value="rejected">✗ Recusar</option>
+            </select>
+          </td>
         </tr>`;
       }).join('')}</tbody>
     </table></div></div>`;
   } catch(e) { showToast(e.message,'error'); }
+}
+
+async function onVacationDecision(id, decision) {
+  if (!decision) return;
+  let reason = '';
+  if (decision === 'rejected') {
+    reason = prompt('Motivo da recusa (opcional):') || '';
+  }
+  await decideVacation(id, decision, reason);
 }
 
 // ─── HISTORY ──────────────────────────────────────────────────────────────────

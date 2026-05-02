@@ -172,6 +172,17 @@ const initDB = async () => {
 
 // ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
 app.use(express.json());
+
+// Serve JS and CSS with no-cache headers so updates are always picked up
+app.get('/app.js', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public', 'app.js'));
+});
+app.get('/style.css', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public', 'style.css'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 const auth = (req, res, next) => {

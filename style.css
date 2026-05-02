@@ -707,3 +707,22 @@ textarea { resize: vertical; min-height: 80px; }
   padding: 1px 5px; background: var(--purple)20;
   color: var(--purple); border-radius: 3px; font-size: 10px;
 }
+
+/* ─── DECISION DROPDOWN ──────────────────────────────────────────────────── */
+.decision-select {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 10px;
+  cursor: pointer;
+  min-width: 130px;
+  transition: border-color .15s;
+}
+.decision-select:hover { border-color: var(--accent)60; }
+.decision-select:focus { outline: none; border-color: var(--accent); }
+.decision-select option[value="approved"] { color: var(--success); }
+.decision-select option[value="rejected"] { color: var(--danger); }
