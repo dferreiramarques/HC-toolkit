@@ -726,3 +726,40 @@ textarea { resize: vertical; min-height: 80px; }
 .decision-select:focus { outline: none; border-color: var(--accent); }
 .decision-select option[value="approved"] { color: var(--success); }
 .decision-select option[value="rejected"] { color: var(--danger); }
+
+/* ─── SPECIAL DAYS MAP ───────────────────────────────────────────────────── */
+.map-name-header { width: 140px; }
+
+.map-header-day.special-holiday  { color: var(--danger) !important; font-weight: 600; }
+.map-header-day.special-pt-holiday { color: var(--danger); opacity: .7; }
+.map-header-day.special-event    { color: var(--purple) !important; font-weight: 600; }
+
+.map-cell.day-holiday { background: var(--danger)12; }
+.map-cell.day-event   { background: var(--purple)12; }
+
+.day-dot {
+  display: block; width: 4px; height: 4px;
+  border-radius: 50%; background: currentColor;
+  margin: 1px auto 0;
+}
+
+.dot-holiday { background: var(--danger)60; border: 1px solid var(--danger); }
+.dot-event   { background: var(--purple)60; border: 1px solid var(--purple); }
+
+/* Special days list below map */
+.special-day-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.special-day-item:last-child { border-bottom: none; }
+
+.sd-dot {
+  width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;
+}
+.sd-holiday  { background: var(--danger); }
+.sd-cdi_event { background: var(--purple); }
+
+.sd-date { color: var(--muted); width: 24px; text-align: center; font-weight: 600; }
+.sd-name { flex: 1; color: var(--text); }
+.sd-type { color: var(--muted); font-size: 11px; }

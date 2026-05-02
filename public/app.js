@@ -275,29 +275,71 @@ function changeMapMonth(d) {
   loadTeamMap();
 }
 
+// Parse a DB date string "YYYY-MM-DD" (or ISO) without timezone shift
+function parseDate(str) {
+  const s = (str||'').split('T')[0];
+  const [y,m,d] = s.split('-').map(Number);
+  return new Date(y, m-1, d);
+}
+
 async function loadTeamMap() {
   document.getElementById('map-month-label').textContent = `${monthPT(mapMonth)} ${mapYear}`;
   try {
-    const [teamVacations, users] = await Promise.all([
-      api('GET', '/api/vacations/team'), api('GET', '/api/users')
+    const [teamVacations, users, specialDays] = await Promise.all([
+      api('GET', '/api/vacations/team'),
+      api('GET', '/api/users'),
+      api('GET', `/api/special-days?year=${mapYear}`)
     ]);
+
     const daysInMonth = new Date(mapYear, mapMonth, 0).getDate();
     const today = new Date();
     const container = document.getElementById('team-map-container');
 
-    let headers = '<div style="width:140px"></div>';
+    // Build special day map for this month: day -> {type, name}
+    const specialMap = {};
+    for (const sd of specialDays) {
+      const d = parseDate(sd.date);
+      if (d.getMonth()+1 === mapMonth && d.getFullYear() === mapYear) {
+        specialMap[d.getDate()] = sd;
+      }
+    }
+
+    // PT public holidays for this month
+    const ptH = ptHolidaysJS(mapYear);
+    for (let d=1; d<=daysInMonth; d++) {
+      const key = `${mapYear}-${String(mapMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      if (ptH.has(key) && !specialMap[d]) {
+        specialMap[d] = { type: 'pt_holiday', name: 'Feriado Nacional' };
+      }
+    }
+
+    // Header row
+    let headers = '<div class="map-name-header"></div>';
     for (let d=1; d<=daysInMonth; d++) {
       const date = new Date(mapYear, mapMonth-1, d);
       const isWE = date.getDay()===0||date.getDay()===6;
       const isToday = date.toDateString()===today.toDateString();
-      headers += `<div class="map-header-day ${isWE?'weekend':''} ${isToday?'today':''}">${d}</div>`;
+      const sp = specialMap[d];
+      const cls = [
+        'map-header-day',
+        isWE ? 'weekend' : '',
+        isToday ? 'today' : '',
+        sp?.type==='holiday' ? 'special-holiday' : '',
+        sp?.type==='cdi_event' ? 'special-event' : '',
+        sp?.type==='pt_holiday' ? 'special-pt-holiday' : '',
+      ].filter(Boolean).join(' ');
+      const title = sp ? ` title="${sp.name}"` : '';
+      headers += `<div class="${cls}"${title}>${d}${sp ? '<span class="day-dot"></span>' : ''}</div>`;
     }
 
+    // User rows
     let rows = '';
     for (const user of users) {
+      // Build dayStatus using timezone-safe parsing
       const dayStatus = {};
       for (const v of teamVacations.filter(v=>v.user_id===user.id)) {
-        const s=new Date(v.start_date), e=new Date(v.end_date);
+        const s = parseDate(v.start_date);
+        const e = parseDate(v.end_date);
         for (const cur=new Date(s); cur<=e; cur.setDate(cur.getDate()+1)) {
           if (cur.getMonth()+1===mapMonth && cur.getFullYear()===mapYear)
             dayStatus[cur.getDate()] = v.status;
@@ -305,8 +347,10 @@ async function loadTeamMap() {
       }
       let cells = `<div class="map-name" title="${user.name}">${user.name.split(' ')[0]}</div>`;
       for (let d=1; d<=daysInMonth; d++) {
-        const isWE = new Date(mapYear,mapMonth-1,d).getDay()===0||new Date(mapYear,mapMonth-1,d).getDay()===6;
-        cells += `<div class="map-cell ${dayStatus[d]?`vacation-${dayStatus[d]}`:''} ${isWE?'weekend':''}"></div>`;
+        const date = new Date(mapYear, mapMonth-1, d);
+        const isWE = date.getDay()===0||date.getDay()===6;
+        const sp = specialMap[d];
+        cells += `<div class="map-cell ${dayStatus[d]?`vacation-${dayStatus[d]}`:''} ${isWE?'weekend':''} ${sp?.type==='holiday'||sp?.type==='pt_holiday'?'day-holiday':''} ${sp?.type==='cdi_event'?'day-event':''}" title="${sp?sp.name:''}"></div>`;
       }
       rows += `<div class="map-row" style="--days:${daysInMonth}">${cells}</div>`;
     }
@@ -315,6 +359,92 @@ async function loadTeamMap() {
       <div class="map-header-row" style="--days:${daysInMonth};display:grid;grid-template-columns:140px repeat(${daysInMonth},1fr)">${headers}</div>
       ${rows}
     </div>`;
+
+    // Special days list below map
+    const sdList = specialDays.filter(sd => {
+      const d = parseDate(sd.date);
+      return d.getMonth()+1===mapMonth && d.getFullYear()===mapYear;
+    });
+    const sdEl = document.getElementById('map-special-days');
+    sdEl.innerHTML = sdList.length ? sdList.map(sd=>`
+      <div class="special-day-item">
+        <span class="sd-dot sd-${sd.type}"></span>
+        <span class="sd-date">${parseDate(sd.date).getDate()}</span>
+        <span class="sd-name">${sd.name}</span>
+        <span class="sd-type">${sd.type==='holiday'?'Feriado':'Evento CDI'}</span>
+        ${currentUser.role==='admin'?`<button class="btn btn-danger" style="padding:2px 8px;font-size:10px" onclick="deleteSpecialDay(${sd.id})">✕</button>`:''}
+      </div>`).join('') : '<span class="text-muted" style="font-size:12px">Sem dias especiais neste mês</span>';
+
+  } catch(e) { showToast(e.message,'error'); console.error(e); }
+}
+
+// PT holidays in JS (client-side, mirrors server logic)
+function ptHolidaysJS(year) {
+  const a=year%19,b=Math.floor(year/100),c=year%100;
+  const d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25);
+  const g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30;
+  const i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7;
+  const m=Math.floor((a+11*h+22*l)/451);
+  const mo=Math.floor((h+l-7*m+114)/31), dy=((h+l-7*m+114)%31)+1;
+  const easter=new Date(year,mo-1,dy);
+  const add=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r;};
+  const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return new Set([
+    `${year}-01-01`,fmt(add(easter,-47)),fmt(add(easter,-2)),fmt(easter),
+    fmt(add(easter,60)),`${year}-04-25`,`${year}-05-01`,`${year}-06-10`,
+    `${year}-08-15`,`${year}-10-05`,`${year}-11-01`,
+    `${year}-12-01`,`${year}-12-08`,`${year}-12-25`
+  ]);
+}
+
+async function deleteSpecialDay(id) {
+  if (!confirm('Remover este dia especial?')) return;
+  try {
+    await api('DELETE', `/api/special-days/${id}`);
+    showToast('Removido ✓','success');
+    loadTeamMap();
+    if (document.getElementById('section-admin').style.display!=='none') loadSpecialDaysAdmin();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function submitSpecialDay() {
+  const btn = document.querySelector('#modal-special-day .btn-primary');
+  const body = {
+    date: document.getElementById('sd-date').value,
+    name: document.getElementById('sd-name').value.trim(),
+    type: document.getElementById('sd-type').value,
+    description: document.getElementById('sd-desc').value.trim()
+  };
+  if (!body.date || !body.name) return showModalError('modal-special-day','Data e nome obrigatórios.');
+  btn.textContent='A guardar…'; btn.disabled=true;
+  try {
+    await api('POST', '/api/special-days', body);
+    closeModal();
+    showToast('Dia especial adicionado ✓','success');
+    loadSpecialDaysAdmin();
+  } catch(e) { showModalError('modal-special-day', e.message); }
+  finally { btn.textContent='Adicionar'; btn.disabled=false; }
+}
+
+async function loadSpecialDaysAdmin() {
+  try {
+    const year = new Date().getFullYear();
+    const [thisYear, nextYear] = await Promise.all([
+      api('GET', `/api/special-days?year=${year}`),
+      api('GET', `/api/special-days?year=${year+1}`)
+    ]);
+    const all = [...thisYear, ...nextYear];
+    const el = document.getElementById('special-days-list');
+    el.innerHTML = `<div class="card" style="margin-top:20px"><div class="table-wrap"><table>
+      <thead><tr><th>Data</th><th>Nome</th><th>Tipo</th><th>Descrição</th><th></th></tr></thead>
+      <tbody>${all.length ? all.map(sd=>`<tr>
+        <td class="fw-600">${fmtDate(sd.date)}</td>
+        <td>${sd.name}</td>
+        <td><span class="status ${sd.type==='holiday'?'status-rejected':'status-approved'}">${sd.type==='holiday'?'Feriado':'Evento CDI'}</span></td>
+        <td class="text-muted">${sd.description||'—'}</td>
+        <td class="td-actions"><button class="btn btn-danger" onclick="deleteSpecialDay(${sd.id})">✕ Remover</button></td>
+      </tr>`).join('') : '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:20px">Sem dias especiais definidos</td></tr>'}</tbody>
+    </table></div></div>`;
   } catch(e) { showToast(e.message,'error'); }
 }
 
@@ -629,15 +759,17 @@ async function loadHistory() {
 // ─── ADMIN ────────────────────────────────────────────────────────────────────
 function loadAdmin() { switchAdminTab('users'); }
 function switchAdminTab(tab) {
+  const tabs = ['users','projects','schedules-admin','special-days'];
   document.querySelectorAll('.admin-tabs .tab-btn').forEach((b,i)=>
-    b.classList.toggle('active',['users','projects','schedules-admin'][i]===tab));
-  ['users','projects','schedules-admin'].forEach(t=>{
+    b.classList.toggle('active', tabs[i]===tab));
+  tabs.forEach(t=>{
     const el=document.getElementById(`admin-tab-${t}`);
     if(el) el.style.display=t===tab?'block':'none';
   });
   if(tab==='users') loadUsers();
   if(tab==='projects') loadProjects();
   if(tab==='schedules-admin') loadAllSchedules();
+  if(tab==='special-days') loadSpecialDaysAdmin();
 }
 
 async function loadUsers() {
