@@ -133,6 +133,16 @@ const initDB = async () => {
         actor_name VARCHAR(255), action VARCHAR(100) NOT NULL, detail JSONB,
         created_at TIMESTAMP DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS special_days (
+        id SERIAL PRIMARY KEY,
+        date DATE NOT NULL UNIQUE,
+        name VARCHAR(255) NOT NULL,
+        type VARCHAR(50) NOT NULL DEFAULT 'holiday',
+        description TEXT,
+        created_by VARCHAR(255),
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS timesheets (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -152,6 +162,14 @@ const initDB = async () => {
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_start DATE`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS birthdate DATE`,
     ];
+    const extraMigrations = [
+      `CREATE TABLE IF NOT EXISTS special_days (
+        id SERIAL PRIMARY KEY, date DATE NOT NULL UNIQUE,
+        name VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL DEFAULT 'holiday',
+        description TEXT, created_by VARCHAR(255), created_at TIMESTAMP DEFAULT NOW()
+      )`,
+    ];
+    for (const m of extraMigrations) await client.query(m).catch(() => {});
     for (const m of migrations) await client.query(m).catch(() => {});
 
     await client.query(`INSERT INTO projects (name,code) VALUES
@@ -173,17 +191,16 @@ const initDB = async () => {
 // ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
 app.use(express.json());
 
-// Serve JS and CSS with no-cache headers so updates are always picked up
-app.get('/app.js', (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  res.sendFile(path.join(__dirname, 'public', 'app.js'));
-});
-app.get('/style.css', (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  res.sendFile(path.join(__dirname, 'public', 'style.css'));
-});
-
-app.use(express.static(path.join(__dirname, 'public')));
+// Servir JS e CSS sempre frescos (sem cache)
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: false,
+  lastModified: false,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    }
+  }
+}));
 
 const auth = (req, res, next) => {
   const t = req.headers.authorization?.split(' ')[1];
@@ -334,6 +351,15 @@ app.post('/api/vacations', auth, async (req, res) => {
 
     const working_days = calcWorkingDays(start_date, end_date);
     if (!working_days) return res.status(400).json({ error: 'O período não tem dias úteis (excluídos fds e feriados PT).' });
+
+    // Check if any day falls on a special holiday
+    const { rows: blocked } = await pool.query(
+      `SELECT name FROM special_days
+       WHERE type = 'holiday' AND date BETWEEN $1 AND $2`,
+      [start_date, end_date]
+    );
+    if (blocked.length > 0)
+      return res.status(400).json({ error: `O período inclui dias bloqueados: ${blocked.map(b=>b.name).join(', ')}` });
 
     const { rows } = await pool.query(
       `INSERT INTO vacation_requests (user_id,start_date,end_date,working_days,notes)
@@ -580,6 +606,40 @@ app.delete('/api/timesheets/:id', auth, async (req, res) => {
   if (!rows[0]) return res.status(404).json({ error: 'Não encontrado' });
   if (req.user.role!=='admin' && rows[0].user_id!==req.user.id) return res.status(403).json({ error: 'Acesso negado' });
   await pool.query('DELETE FROM timesheets WHERE id=$1', [req.params.id]);
+  res.json({ success: true });
+});
+
+// ─── SPECIAL DAYS ────────────────────────────────────────────────────────────
+app.get('/api/special-days', auth, async (req, res) => {
+  const { year } = req.query;
+  let q = 'SELECT * FROM special_days';
+  const params = [];
+  if (year) { q += ' WHERE EXTRACT(YEAR FROM date) = $1'; params.push(year); }
+  q += ' ORDER BY date ASC';
+  const { rows } = await pool.query(q, params);
+  res.json(rows);
+});
+
+app.post('/api/special-days', auth, adminOnly, async (req, res) => {
+  try {
+    const { date, name, type, description } = req.body;
+    if (!date || !name) return res.status(400).json({ error: 'Data e nome obrigatórios' });
+    if (!['holiday','cdi_event'].includes(type))
+      return res.status(400).json({ error: 'Tipo inválido' });
+    const { rows } = await pool.query(
+      `INSERT INTO special_days (date, name, type, description, created_by)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [date, name, type, description || null, req.user.name]
+    );
+    res.json(rows[0]);
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'Já existe um dia especial nesta data' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/special-days/:id', auth, adminOnly, async (req, res) => {
+  await pool.query('DELETE FROM special_days WHERE id = $1', [req.params.id]);
   res.json({ success: true });
 });
 
