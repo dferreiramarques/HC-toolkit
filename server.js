@@ -45,6 +45,13 @@ const sendEmail = async (to, subject, html) => {
   });
 };
 
+// Fire-and-forget — nunca bloqueia nem falha o request
+const sendEmailAsync = (to, subject, html) => {
+  sendEmail(to, subject, html).catch(err =>
+    console.error(`[EMAIL ERRO] Para: ${to} | ${err.message}`)
+  );
+};
+
 const emailLayout = (title, color, icon, rows, approveUrl, rejectUrl) => `
 <!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 body{font-family:monospace;background:#0f1117;margin:0;padding:32px}
@@ -139,6 +146,15 @@ const initDB = async () => {
         status VARCHAR(50) DEFAULT 'pending',
         approval_token VARCHAR(36) UNIQUE,
         approved_by VARCHAR(255),
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS activity_log (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        actor_name VARCHAR(255),
+        action VARCHAR(100) NOT NULL,
+        detail JSONB,
         created_at TIMESTAMP DEFAULT NOW()
       );
 
@@ -354,7 +370,9 @@ app.post('/api/vacations', auth, async (req, res) => {
     const start = new Date(start_date).toLocaleDateString('pt-PT');
     const end = new Date(end_date).toLocaleDateString('pt-PT');
     const days = Math.ceil((new Date(end_date) - new Date(start_date)) / 86400000) + 1;
-    await sendEmail(
+    res.json(rows[0]);
+    // Email não-bloqueante — nunca impede a resposta ao cliente
+    sendEmailAsync(
       managerEmail,
       `[CICF OPS] Pedido de Férias — ${req.user.name}`,
       emailLayout(
@@ -367,7 +385,6 @@ app.post('/api/vacations', auth, async (req, res) => {
         approveUrl, rejectUrl
       )
     );
-    res.json(rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -378,7 +395,40 @@ app.delete('/api/vacations/:id', auth, async (req, res) => {
   if (!rows[0]) return res.status(404).json({ error: 'Não encontrado' });
   if (req.user.role !== 'admin' && rows[0].user_id !== req.user.id) return res.status(403).json({ error: 'Acesso negado' });
   if (rows[0].status === 'approved' && req.user.role !== 'admin') return res.status(400).json({ error: 'Não podes cancelar férias já aprovadas' });
+  
+  const vac = rows[0];
+  const isAdminAction = req.user.role === 'admin' && req.user.id !== vac.user_id;
+  
+  // Log to history before deleting
+  await pool.query(
+    `INSERT INTO activity_log (user_id, actor_name, action, detail)
+     VALUES ($1, $2, 'vacation_cancelled', $3)`,
+    [vac.user_id, req.user.name, JSON.stringify({
+      start_date: vac.start_date,
+      end_date: vac.end_date,
+      status_was: vac.status,
+      cancelled_by: req.user.name
+    })]
+  ).catch(() => {}); // Don't fail if log table not ready
+
   await pool.query('DELETE FROM vacation_requests WHERE id = $1', [req.params.id]);
+  
+  // Notify user if admin cancelled their request
+  if (isAdminAction) {
+    const { rows: userRows } = await pool.query('SELECT email, name FROM users WHERE id = $1', [vac.user_id]);
+    if (userRows[0]) {
+      const start = new Date(vac.start_date).toLocaleDateString('pt-PT');
+      const end = new Date(vac.end_date).toLocaleDateString('pt-PT');
+      sendEmailAsync(userRows[0].email, '[CICF OPS] Pedido de férias cancelado',
+        `<div style="font-family:monospace;background:#0f1117;color:#e2e8f0;padding:32px;border-radius:8px">
+          <h2 style="color:#ef4444">✗ Pedido de férias cancelado</h2>
+          <p>O teu pedido de férias de <strong>${start}</strong> a <strong>${end}</strong> foi cancelado por <strong>${req.user.name}</strong>.</p>
+          <br><a href="${BASE_URL}" style="color:#f59e0b">Ver histórico →</a>
+        </div>`
+      );
+    }
+  }
+  
   res.json({ success: true });
 });
 
@@ -419,7 +469,7 @@ app.post('/api/purchases', auth, async (req, res) => {
     const managerEmail = await getManagerEmail(req.user.id);
     const approveUrl = `${BASE_URL}/approve/${token}/approve`;
     const rejectUrl = `${BASE_URL}/approve/${token}/reject`;
-    await sendEmail(
+    sendEmailAsync(
       managerEmail,
       `[CICF OPS] Pedido de Compra — ${req.user.name}`,
       emailLayout(
@@ -495,7 +545,7 @@ app.post('/api/schedules/change-request', auth, async (req, res) => {
         ? tr(dayPT[i], `${new_schedule[`${d}_start`]} – ${new_schedule[`${d}_end`]}`)
         : ''
     ).join('');
-    await sendEmail(
+    sendEmailAsync(
       managerEmail,
       `[CICF OPS] Alteração de Horário — ${req.user.name}`,
       emailLayout(
@@ -574,6 +624,16 @@ app.delete('/api/timesheets/:id', auth, async (req, res) => {
   res.json({ success: true });
 });
 
+// ─── ACTIVITY LOG / HISTORY ─────────────────────────────────────────────────
+app.get('/api/history', auth, async (req, res) => {
+  const userId = (req.user.role === 'admin' && req.query.userId) ? req.query.userId : req.user.id;
+  const { rows } = await pool.query(
+    `SELECT * FROM activity_log WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`,
+    [userId]
+  );
+  res.json(rows);
+});
+
 // ─── PENDING (admin overview) ─────────────────────────────────────────────────
 app.get('/api/pending', auth, adminOnly, async (req, res) => {
   const [vac, pur, sch] = await Promise.all([
@@ -598,7 +658,7 @@ app.get('/approve/:token/:action', async (req, res) => {
 
   const notify = async (userId, subject, message) => {
     const { rows } = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
-    if (rows[0]) await sendEmail(rows[0].email, `[CICF OPS] ${subject}`, `<div style="font-family:monospace;background:#0f1117;color:#e2e8f0;padding:32px;border-radius:8px"><p>${message}</p><br><a href="${BASE_URL}" style="color:#f59e0b">Aceder ao sistema →</a></div>`);
+    if (rows[0]) sendEmailAsync(rows[0].email, `[CICF OPS] ${subject}`, `<div style="font-family:monospace;background:#0f1117;color:#e2e8f0;padding:32px;border-radius:8px"><p>${message}</p><br><a href="${BASE_URL}" style="color:#f59e0b">Aceder ao sistema →</a></div>`);
   };
 
   // Vacation

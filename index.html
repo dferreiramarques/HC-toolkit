@@ -60,6 +60,9 @@
       <a class="nav-item" data-section="timesheet" onclick="goto('timesheet')">
         <span class="nav-icon">◳</span>Folha de Horas
       </a>
+      <a class="nav-item" data-section="history" onclick="goto('history')">
+        <span class="nav-icon">◴</span>Histórico
+      </a>
       <div class="nav-divider" id="admin-divider" style="display:none"></div>
       <a class="nav-item admin-nav" data-section="approvals" onclick="goto('approvals')" id="nav-approvals" style="display:none">
         <span class="nav-icon">◎</span>Aprovações
@@ -180,7 +183,18 @@
       </div>
     </section>
 
-    <!-- APPROVALS (admin) -->
+    <!-- HISTORY -->
+    <section id="section-history" class="section" style="display:none">
+      <div class="section-header">
+        <h1>Histórico</h1>
+        <button class="btn btn-ghost" onclick="loadHistory()">↺ Atualizar</button>
+      </div>
+      <div class="card">
+        <div id="history-list"></div>
+      </div>
+    </section>
+
+        <!-- APPROVALS (admin) -->
     <section id="section-approvals" class="section" style="display:none">
       <div class="section-header">
         <h1>Aprovações Pendentes</h1>

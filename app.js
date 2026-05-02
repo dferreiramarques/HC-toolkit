@@ -133,6 +133,7 @@ function goto(section) {
     schedules: loadSchedules,
     timesheet: loadTimesheet,
     approvals: loadPending,
+    history: loadHistory,
     admin: loadAdmin
   };
   if (loaders[section]) loaders[section]();
@@ -225,7 +226,9 @@ async function loadVacations() {
                   <td class="text-muted">${v.notes || '—'}</td>
                   <td><span class="status status-${v.status}">${statusPT(v.status)}</span></td>
                   <td class="td-actions">
-                    ${v.status === 'pending' ? `<button class="btn btn-danger" onclick="deleteVacation(${v.id})">Cancelar</button>` : ''}
+                    ${v.status === 'pending' || currentUser.role === 'admin'
+                      ? `<button class="btn btn-danger" onclick="deleteVacation(${v.id}, '${(v.user_name||'').replace(/'/g,'')}', '${v.status}')">${currentUser.role === 'admin' ? '✕ Apagar' : 'Cancelar'}</button>`
+                      : ''}
                   </td>
                 </tr>`;
               }).join('')}
@@ -259,12 +262,17 @@ async function submitVacation() {
   }
 }
 
-async function deleteVacation(id) {
-  if (!confirm('Cancelar este pedido?')) return;
+async function deleteVacation(id, userName, status) {
+  const isAdmin = currentUser.role === 'admin';
+  const msg = isAdmin && userName
+    ? `Apagar o pedido de férias de ${userName}? ${status === 'approved' ? '(já aprovado!)' : ''} O colaborador será notificado.`
+    : 'Cancelar este pedido de férias?';
+  if (!confirm(msg)) return;
   try {
     await api('DELETE', `/api/vacations/${id}`);
-    showToast('Pedido cancelado', 'success');
+    showToast('Pedido apagado ✓', 'success');
     loadVacations();
+    if (currentUser.role === 'admin') updatePendingBadge();
   } catch (e) { showToast(e.message, 'error'); }
 }
 
@@ -624,6 +632,42 @@ async function deleteTimesheet(id) {
 }
 
 // ─── APPROVALS (admin) ────────────────────────────────────────────────────────
+const actionLabel = {
+  vacation_cancelled: '📅 Férias canceladas',
+  purchase_cancelled: '🛒 Compra cancelada',
+  schedule_changed:   '🕐 Horário alterado',
+};
+
+async function loadHistory() {
+  try {
+    const logs = await api('GET', '/api/history');
+    const el = document.getElementById('history-list');
+    if (logs.length === 0) {
+      el.innerHTML = '<div class="empty-state"><span class="empty-icon">◴</span>Sem atividade registada.</div>';
+      return;
+    }
+    el.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>Data</th><th>Ação</th><th>Detalhe</th><th>Por</th></tr></thead>
+      <tbody>
+        ${logs.map(l => {
+          const d = l.detail || {};
+          let detail = '';
+          if (l.action === 'vacation_cancelled') {
+            detail = d.start_date ? fmtDate(d.start_date) + ' → ' + fmtDate(d.end_date) : '—';
+            if (d.status_was === 'approved') detail += ' <span class="text-danger">(estava aprovado)</span>';
+          }
+          return `<tr>
+            <td class="text-muted">${fmtDate(l.created_at)}</td>
+            <td>${actionLabel[l.action] || l.action}</td>
+            <td>${detail || '—'}</td>
+            <td class="text-muted">${l.actor_name || '—'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div>`;
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
 async function cleanupDuplicates() {
   if (!confirm('Remover todos os pedidos de férias duplicados pendentes? Mantém apenas 1 por período.')) return;
   try {
@@ -634,7 +678,7 @@ async function cleanupDuplicates() {
   } catch (e) { showToast(e.message, 'error'); }
 }
 
-async function loadPending()loadPending() {
+async function loadPending() {
   try {
     const pending = await api('GET', '/api/pending');
     const el = document.getElementById('approvals-list');
@@ -883,7 +927,10 @@ function showModal(id) {
 }
 
 function closeModal() {
-  document.getElementById('modal-overlay').style.display = 'none';
+  const overlay = document.getElementById('modal-overlay');
+  overlay.style.display = 'none';
+  overlay.style.cssText = 'display:none!important';
+  setTimeout(() => { overlay.style.cssText = ''; }, 50);
   document.querySelectorAll('.modal').forEach(m => {
     m.style.display = 'none';
     const errEl = m.querySelector('.modal-error');
