@@ -191,10 +191,39 @@
     <div id="modal-vacation" class="modal" style="display:none">
       <div class="modal-header"><h2 id="vac-modal-title">Pedido de Férias</h2><button onclick="closeModal()">✕</button></div>
       <input type="hidden" id="vac-edit-id">
-      <div class="form-row">
-        <div class="form-group"><label>Data de Início</label><input type="date" id="vac-start" onchange="updateWorkingDays()"></div>
-        <div class="form-group"><label>Data de Fim</label><input type="date" id="vac-end" onchange="updateWorkingDays()"></div>
+
+      <!-- Duration type selector -->
+      <div class="form-group">
+        <label>Tipo de marcação</label>
+        <div class="toggle-group">
+          <button class="toggle-btn active" id="btn-multiday" onclick="setVacMode('multi')">📅 Vários dias</button>
+          <button class="toggle-btn" id="btn-halfday" onclick="setVacMode('half')">🕐 Meio dia</button>
+        </div>
       </div>
+
+      <!-- Multi-day -->
+      <div id="vac-multi-fields">
+        <div class="form-row">
+          <div class="form-group"><label>Data de Início</label><input type="date" id="vac-start" onchange="updateWorkingDays()"></div>
+          <div class="form-group"><label>Data de Fim</label><input type="date" id="vac-end" onchange="updateWorkingDays()"></div>
+        </div>
+      </div>
+
+      <!-- Half-day -->
+      <div id="vac-half-fields" style="display:none">
+        <div class="form-row">
+          <div class="form-group"><label>Data</label><input type="date" id="vac-half-date" onchange="updateWorkingDays()"></div>
+          <div class="form-group">
+            <label>Período</label>
+            <div class="toggle-group">
+              <button class="toggle-btn active" id="btn-am" onclick="setHalfPeriod('am')">☀️ Manhã</button>
+              <button class="toggle-btn" id="btn-full" onclick="setHalfPeriod('full')">🌕 Dia todo</button>
+              <button class="toggle-btn" id="btn-pm" onclick="setHalfPeriod('pm')">🌙 Tarde</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="working-days-preview" id="vac-working-days"></div>
       <div class="form-group"><label>Notas (opcional)</label><textarea id="vac-notes" rows="2"></textarea></div>
       <div class="modal-footer">

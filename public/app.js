@@ -185,10 +185,10 @@ async function loadVacations() {
                 <button class="btn btn-reject" onclick="promptRejectVacation(${v.id})">✗ Recusar</button>
               ` : ''}
               ${v.status === 'pending' ? `
-                <button class="btn btn-ghost" onclick="editVacation(${v.id},'${v.start_date.split('T')[0]}','${v.end_date.split('T')[0]}','${(v.notes||'').replace(/'/g,"\\'")}')">Editar</button>
+                <button class="btn btn-ghost" onclick="editVacation(${v.id},'${v.start_date.split('T')[0]}','${v.end_date.split('T')[0]}','${(v.notes||'').replace(/'/g,'')}',${v.is_half_day||false},'${v.day_period||'full'}')">Editar</button>
                 <button class="btn btn-danger" onclick="cancelVacation(${v.id})">Cancelar</button>
               ` : v.status !== 'cancelled' ? `
-                <button class="btn btn-ghost" onclick="editVacation(${v.id},'${v.start_date.split('T')[0]}','${v.end_date.split('T')[0]}','${(v.notes||'').replace(/'/g,"\\'")}')">Editar datas</button>
+                <button class="btn btn-ghost" onclick="editVacation(${v.id},'${v.start_date.split('T')[0]}','${v.end_date.split('T')[0]}','${(v.notes||'').replace(/'/g,'')}',${v.is_half_day||false},'${v.day_period||'full'}')">Editar datas</button>
               ` : ''}
             </td>
           </tr>`).join('')}
@@ -221,50 +221,84 @@ function promptRejectVacation(id) {
   decideVacation(id, 'rejected', reason);
 }
 
-function editVacation(id, start, end, notes) {
+// ─── VACATION MODAL STATE ────────────────────────────────────────────────────
+let vacMode = 'multi';
+let halfPeriod = 'am';
+
+function setVacMode(mode) {
+  vacMode = mode;
+  document.getElementById('vac-multi-fields').style.display = mode==='multi'?'block':'none';
+  document.getElementById('vac-half-fields').style.display  = mode==='half'?'block':'none';
+  document.getElementById('btn-multiday').classList.toggle('active', mode==='multi');
+  document.getElementById('btn-halfday').classList.toggle('active',  mode==='half');
+  updateWorkingDays();
+}
+
+function setHalfPeriod(p) {
+  halfPeriod = p;
+  ['am','full','pm'].forEach(x => document.getElementById('btn-'+x).classList.toggle('active', x===p));
+  updateWorkingDays();
+}
+
+function editVacation(id, start, end, notes, isHalfDay, period) {
   document.getElementById('vac-edit-id').value = id;
-  document.getElementById('vac-start').value = start;
-  document.getElementById('vac-end').value = end;
-  document.getElementById('vac-notes').value = notes;
   document.getElementById('vac-modal-title').textContent = 'Editar Pedido de Férias';
   document.getElementById('vac-working-days').textContent = '';
+  document.getElementById('vac-notes').value = notes;
+  if (isHalfDay === 'true' || isHalfDay === true) {
+    setVacMode('half');
+    document.getElementById('vac-half-date').value = start;
+    setHalfPeriod(period || 'am');
+  } else {
+    setVacMode('multi');
+    document.getElementById('vac-start').value = start;
+    document.getElementById('vac-end').value = end;
+  }
   updateWorkingDays();
   showModal('modal-vacation');
 }
 
 async function updateWorkingDays() {
-  const start = document.getElementById('vac-start').value;
-  const end   = document.getElementById('vac-end').value;
-  const el    = document.getElementById('vac-working-days');
-  if (!start || !end || end < start) { el.textContent = ''; return; }
+  const el = document.getElementById('vac-working-days');
+  if (vacMode === 'half') {
+    const d = document.getElementById('vac-half-date') && document.getElementById('vac-half-date').value;
+    if (!d) { el.textContent=''; return; }
+    const labels = {am:'Manhã (0.5 dias úteis)', full:'Dia completo (1 dia útil)', pm:'Tarde (0.5 dias úteis)'};
+    el.textContent = labels[halfPeriod]; el.style.color='var(--accent)'; return;
+  }
+  const start = document.getElementById('vac-start') && document.getElementById('vac-start').value;
+  const end   = document.getElementById('vac-end') && document.getElementById('vac-end').value;
+  if (!start || !end || end < start) { el.textContent=''; return; }
   try {
-    const r = await api('GET', `/api/working-days?start=${start}&end=${end}`);
-    el.textContent = r.working_days > 0
-      ? `${r.working_days} dias úteis (excluindo fds e feriados PT)`
-      : '⚠ Nenhum dia útil neste período';
-    el.style.color = r.working_days > 0 ? 'var(--accent)' : 'var(--danger)';
-  } catch { el.textContent = ''; }
+    const r = await api('GET', '/api/working-days?start='+start+'&end='+end);
+    el.textContent = r.working_days>0 ? r.working_days+' dias úteis (excluindo fds e feriados PT)' : 'Nenhum dia útil neste período';
+    el.style.color = r.working_days>0 ? 'var(--accent)' : 'var(--danger)';
+  } catch(e) { el.textContent=''; }
 }
 
 async function submitVacation() {
   const btn = document.querySelector('#modal-vacation .btn-primary');
-  const id    = document.getElementById('vac-edit-id').value;
-  const start = document.getElementById('vac-start').value;
-  const end   = document.getElementById('vac-end').value;
+  const id  = document.getElementById('vac-edit-id').value;
   const notes = document.getElementById('vac-notes').value;
-  if (!start || !end) return showModalError('modal-vacation','Preenche as datas.');
-  if (end < start)    return showModalError('modal-vacation','Data de fim anterior ao início.');
-  btn.textContent = 'A submeter…'; btn.disabled = true;
+  let body;
+  if (vacMode === 'half') {
+    const date = document.getElementById('vac-half-date').value;
+    if (!date) return showModalError('modal-vacation','Escolhe uma data.');
+    const isFullDay = halfPeriod === 'full';
+    body = { start_date:date, end_date:date, notes, is_half_day:!isFullDay, day_period:halfPeriod };
+  } else {
+    const start = document.getElementById('vac-start').value;
+    const end   = document.getElementById('vac-end').value;
+    if (!start || !end) return showModalError('modal-vacation','Preenche as datas.');
+    if (end <= start) return showModalError('modal-vacation','Para marcacoes de 1 dia usa o modo Meio Dia.');
+    body = { start_date:start, end_date:end, notes, is_half_day:false, day_period:'full' };
+  }
+  btn.textContent='A submeter...'; btn.disabled=true;
   try {
-    if (id) {
-      await api('PATCH', `/api/vacations/${id}`, { start_date:start, end_date:end, notes });
-      showToast('Pedido atualizado — voltou a pendente ✓','success');
-    } else {
-      await api('POST', '/api/vacations', { start_date:start, end_date:end, notes });
-      showToast('Pedido submetido ✓','success');
-    }
+    if (id) { await api('PATCH','/api/vacations/'+id,body); showToast('Pedido atualizado','success'); }
+    else    { await api('POST','/api/vacations',body); showToast('Pedido submetido','success'); }
     closeModal(); loadVacations(); updatePendingBadge();
-  } catch(e) { showModalError('modal-vacation', e.message); }
+  } catch(e) { showModalError('modal-vacation',e.message); }
   finally { btn.textContent='Submeter Pedido'; btn.disabled=false; }
 }
 
@@ -337,7 +371,7 @@ async function loadTeamMap() {
     for (const user of users) {
       // Build dayStatus using timezone-safe parsing
       const dayStatus = {};
-      for (const v of teamVacations.filter(v=>v.user_id===user.id)) {
+      for (const v of teamVacations.filter(v=>String(v.user_id)===String(user.id))) {
         const s = parseDate(v.start_date);
         const e = parseDate(v.end_date);
         for (const cur=new Date(s); cur<=e; cur.setDate(cur.getDate()+1)) {
@@ -350,7 +384,23 @@ async function loadTeamMap() {
         const date = new Date(mapYear, mapMonth-1, d);
         const isWE = date.getDay()===0||date.getDay()===6;
         const sp = specialMap[d];
-        cells += `<div class="map-cell ${dayStatus[d]?`vacation-${dayStatus[d]}`:''} ${isWE?'weekend':''} ${sp?.type==='holiday'||sp?.type==='pt_holiday'?'day-holiday':''} ${sp?.type==='cdi_event'?'day-event':''}" title="${sp?sp.name:''}"></div>`;
+        const vac = teamVacations.filter(v=>String(v.user_id)===String(user.id)).find(v => {
+          const s=parseDate(v.start_date), e=parseDate(v.end_date);
+          const cur=new Date(mapYear,mapMonth-1,d);
+          return cur>=s && cur<=e;
+        });
+        let inner = '';
+        if (vac) {
+          const color = vac.status==='approved' ? 'var(--success)' : 'var(--warning)';
+          if (vac.is_half_day && vac.day_period==='am') {
+            inner = `<svg viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><polygon points="0,0 10,0 0,10" fill="${color}" opacity=".7"/></svg>`;
+          } else if (vac.is_half_day && vac.day_period==='pm') {
+            inner = `<svg viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><polygon points="10,0 10,10 0,10" fill="${color}" opacity=".7"/></svg>`;
+          } else {
+            inner = `<div style="width:100%;height:100%;background:${color};opacity:.6"></div>`;
+          }
+        }
+        cells += `<div class="map-cell ${isWE?'weekend':''} ${sp?.type==='holiday'||sp?.type==='pt_holiday'?'day-holiday':''} ${sp?.type==='cdi_event'?'day-event':''}" title="${vac?vac.status+' '+(vac.is_half_day?vac.day_period:''):''}${sp?sp.name:''}">${inner}</div>`;
       }
       rows += `<div class="map-row" style="--days:${daysInMonth}">${cells}</div>`;
     }

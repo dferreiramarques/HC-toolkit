@@ -763,3 +763,23 @@ textarea { resize: vertical; min-height: 80px; }
 .sd-date { color: var(--muted); width: 24px; text-align: center; font-weight: 600; }
 .sd-name { flex: 1; color: var(--text); }
 .sd-type { color: var(--muted); font-size: 11px; }
+
+/* ─── VACATION MODAL TOGGLE ──────────────────────────────────────────────── */
+.toggle-group {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.toggle-btn {
+  background: var(--surface2); border: 1px solid var(--border2);
+  color: var(--muted); font-family: var(--mono); font-size: 12px;
+  padding: 7px 14px; border-radius: 6px; cursor: pointer;
+  transition: all .15s;
+}
+.toggle-btn:hover { border-color: var(--accent)60; color: var(--text); }
+.toggle-btn.active {
+  background: var(--accent)20; border-color: var(--accent);
+  color: var(--accent); font-weight: 600;
+}
+
+/* ─── MAP CELL SVG TRIANGLES ─────────────────────────────────────────────── */
+.map-cell { padding: 0; overflow: hidden; }
+.map-cell svg { display: block; }
