@@ -403,6 +403,31 @@ app.post('/api/vacations/:id/decide', auth, adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Cancelar pedido (próprio se pending, admin sempre)
+app.delete('/api/vacations/:id', auth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT v.*, u.email as user_email FROM vacation_requests v
+       JOIN users u ON v.user_id=u.id WHERE v.id=$1`, [req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Não encontrado' });
+    const v = rows[0];
+    if (req.user.role !== 'admin' && v.user_id !== req.user.id)
+      return res.status(403).json({ error: 'Acesso negado' });
+    if (req.user.role !== 'admin' && v.status !== 'pending')
+      return res.status(400).json({ error: 'Só podes cancelar pedidos pendentes' });
+
+    await pool.query(
+      `UPDATE vacation_requests SET status='cancelled', decided_by=$1, decided_at=NOW(), updated_at=NOW() WHERE id=$2`,
+      [req.user.name, req.params.id]
+    );
+    await pool.query(`INSERT INTO activity_log (user_id,actor_name,action,detail) VALUES ($1,$2,$3,$4)`,
+      [v.user_id, req.user.name, 'vacation_cancelled',
+       JSON.stringify({ start_date: v.start_date, end_date: v.end_date })]).catch(()=>{});
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── PURCHASES ────────────────────────────────────────────────────────────────
 app.get('/api/purchases', auth, async (req, res) => {
   const isAdmin = req.user.role==='admin';

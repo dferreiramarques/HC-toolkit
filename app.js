@@ -181,14 +181,28 @@ async function loadVacations() {
             <td class="text-muted" style="font-size:11px">${v.decided_by||'—'}</td>
             <td class="td-actions">
               ${currentUser.role==='admin' && v.status==='pending' ? `
-                <button class="btn btn-approve" onclick="decideVacation(${v.id},'approved')">✓</button>
-                <button class="btn btn-reject" onclick="promptRejectVacation(${v.id})">✗</button>
+                <button class="btn btn-approve" onclick="decideVacation(${v.id},'approved')">✓ Aprovar</button>
+                <button class="btn btn-reject" onclick="promptRejectVacation(${v.id})">✗ Recusar</button>
               ` : ''}
-              <button class="btn btn-ghost" onclick="editVacation(${v.id},'${v.start_date.split('T')[0]}','${v.end_date.split('T')[0]}','${(v.notes||'').replace(/'/g,"\\'")}')">Editar</button>
+              ${v.status === 'pending' ? `
+                <button class="btn btn-ghost" onclick="editVacation(${v.id},'${v.start_date.split('T')[0]}','${v.end_date.split('T')[0]}','${(v.notes||'').replace(/'/g,"\\'")}')">Editar</button>
+                <button class="btn btn-danger" onclick="cancelVacation(${v.id})">Cancelar</button>
+              ` : v.status !== 'cancelled' ? `
+                <button class="btn btn-ghost" onclick="editVacation(${v.id},'${v.start_date.split('T')[0]}','${v.end_date.split('T')[0]}','${(v.notes||'').replace(/'/g,"\\'")}')">Editar datas</button>
+              ` : ''}
             </td>
           </tr>`).join('')}
         </tbody>
       </table></div></div>`;
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function cancelVacation(id) {
+  if (!confirm('Cancelar este pedido de férias?')) return;
+  try {
+    await api('DELETE', `/api/vacations/${id}`);
+    showToast('Pedido cancelado','success');
+    loadVacations(); updatePendingBadge();
   } catch(e) { showToast(e.message,'error'); }
 }
 
@@ -785,7 +799,7 @@ function fmtDate(d) {
   if(!d) return '—';
   return new Date(d).toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit',year:'numeric'});
 }
-function statusPT(s) { return {pending:'Pendente',approved:'Aprovado',rejected:'Recusado'}[s]||s; }
+function statusPT(s) { return {pending:'Pendente',approved:'Aprovado',rejected:'Recusado',cancelled:'Cancelado'}[s]||s; }
 function monthPT(m) { return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1]; }
 
 let toastTimer;
