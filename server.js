@@ -328,6 +328,20 @@ app.get('/api/vacations/team', auth, async (req, res) => {
 app.post('/api/vacations', auth, async (req, res) => {
   try {
     const { start_date, end_date, notes } = req.body;
+
+    // Check for overlapping pending/approved requests
+    const { rows: overlap } = await pool.query(`
+      SELECT id FROM vacation_requests
+      WHERE user_id = $1
+        AND status IN ('pending', 'approved')
+        AND start_date <= $3
+        AND end_date >= $2
+    `, [req.user.id, start_date, end_date]);
+
+    if (overlap.length > 0) {
+      return res.status(409).json({ error: 'Já existe um pedido de férias pendente ou aprovado que coincide com estas datas.' });
+    }
+
     const token = uuidv4();
     const { rows } = await pool.query(
       `INSERT INTO vacation_requests (user_id, start_date, end_date, notes, approval_token)
@@ -363,9 +377,24 @@ app.delete('/api/vacations/:id', auth, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM vacation_requests WHERE id = $1', [req.params.id]);
   if (!rows[0]) return res.status(404).json({ error: 'Não encontrado' });
   if (req.user.role !== 'admin' && rows[0].user_id !== req.user.id) return res.status(403).json({ error: 'Acesso negado' });
-  if (rows[0].status === 'approved') return res.status(400).json({ error: 'Não podes cancelar férias já aprovadas' });
+  if (rows[0].status === 'approved' && req.user.role !== 'admin') return res.status(400).json({ error: 'Não podes cancelar férias já aprovadas' });
   await pool.query('DELETE FROM vacation_requests WHERE id = $1', [req.params.id]);
   res.json({ success: true });
+});
+
+// Admin: delete all pending duplicates for a user keeping only the latest
+app.delete('/api/admin/vacations/duplicates', auth, adminOnly, async (req, res) => {
+  const { rows } = await pool.query(`
+    DELETE FROM vacation_requests
+    WHERE id NOT IN (
+      SELECT DISTINCT ON (user_id, start_date, end_date) id
+      FROM vacation_requests
+      ORDER BY user_id, start_date, end_date, created_at DESC
+    )
+    AND status = 'pending'
+    RETURNING id
+  `);
+  res.json({ deleted: rows.length });
 });
 
 // ─── PURCHASES ────────────────────────────────────────────────────────────────
@@ -654,9 +683,21 @@ a:hover{background:#f59e0b15}
 
 // ─── SPA FALLBACK ─────────────────────────────────────────────────────────────
 app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api') && !req.path.startsWith('/approve')) {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'Rota não encontrada' });
   }
+  const indexPath = path.join(__dirname, 'public', 'index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error('Erro ao servir index.html:', err.message, '| Path:', indexPath);
+      res.status(500).send(`
+        <h2>Erro de configuração</h2>
+        <p>Ficheiro index.html não encontrado em: <code>${indexPath}</code></p>
+        <p>Garante que a pasta <code>public/</code> foi incluída no repositório git.</p>
+        <pre>ls: ${require('fs').readdirSync(__dirname).join(', ')}</pre>
+      `);
+    }
+  });
 });
 
 // ─── START ────────────────────────────────────────────────────────────────────

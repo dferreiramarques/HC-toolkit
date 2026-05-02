@@ -237,18 +237,26 @@ async function loadVacations() {
 }
 
 async function submitVacation() {
+  const btn = document.querySelector('#modal-vacation .btn-primary');
+  const start = document.getElementById('vac-start').value;
+  const end   = document.getElementById('vac-end').value;
+  const notes = document.getElementById('vac-notes').value;
+  if (!start || !end) return showModalError('modal-vacation', 'Preenche as datas de início e fim.');
+  if (new Date(end) < new Date(start)) return showModalError('modal-vacation', 'A data de fim não pode ser anterior ao início.');
+  btn.textContent = 'A submeter...';
+  btn.disabled = true;
   try {
-    const start = document.getElementById('vac-start').value;
-    const end   = document.getElementById('vac-end').value;
-    const notes = document.getElementById('vac-notes').value;
-    if (!start || !end) return showToast('Datas obrigatórias', 'error');
-    if (new Date(end) < new Date(start)) return showToast('Data de fim anterior ao início', 'error');
     await api('POST', '/api/vacations', { start_date: start, end_date: end, notes });
     closeModal();
     showToast('Pedido submetido — email enviado para aprovação ✓', 'success');
     loadVacations();
     updatePendingBadge();
-  } catch (e) { showToast(e.message, 'error'); }
+  } catch (e) {
+    showModalError('modal-vacation', e.message || 'Erro ao submeter. Verifica a ligação.');
+  } finally {
+    btn.textContent = 'Submeter Pedido';
+    btn.disabled = false;
+  }
 }
 
 async function deleteVacation(id) {
@@ -616,7 +624,17 @@ async function deleteTimesheet(id) {
 }
 
 // ─── APPROVALS (admin) ────────────────────────────────────────────────────────
-async function loadPending() {
+async function cleanupDuplicates() {
+  if (!confirm('Remover todos os pedidos de férias duplicados pendentes? Mantém apenas 1 por período.')) return;
+  try {
+    const r = await api('DELETE', '/api/admin/vacations/duplicates');
+    showToast(`${r.deleted} pedidos duplicados removidos ✓`, 'success');
+    loadPending();
+    updatePendingBadge();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function loadPending()loadPending() {
   try {
     const pending = await api('GET', '/api/pending');
     const el = document.getElementById('approvals-list');
@@ -625,6 +643,17 @@ async function loadPending() {
       el.innerHTML = `<div class="card"><div class="empty-state"><span class="empty-icon">◎</span>Sem aprovações pendentes. 🎉</div></div>`;
       document.getElementById('pending-badge').style.display = 'none';
       return;
+    }
+
+    // Show cleanup button if there are duplicates
+    const vacMap = {};
+    let hasDups = false;
+    for (const p of pending) {
+      if (p.type === 'vacation') {
+        const key = p.user_id + '_' + p.start_date + '_' + p.end_date;
+        vacMap[key] = (vacMap[key] || 0) + 1;
+        if (vacMap[key] > 1) hasDups = true;
+      }
     }
 
     const typeIcon = { vacation: '📅', purchase: '🛒', schedule: '🕐' };
@@ -648,9 +677,10 @@ async function loadPending() {
         }).join('')}
       </tbody>
     </table></div>
-    <p style="color:var(--muted);font-size:12px;margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
-      ℹ Os emails de aprovação já foram enviados. Aprova/rejeita pelos links no email, ou aguarda que o responsável o faça.
-    </p>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+      <p style="color:var(--muted);font-size:12px">ℹ Aprova/rejeita pelos links no email, ou aguarda que o responsável o faça.</p>
+      ${hasDups ? `<button class="btn btn-danger" onclick="cleanupDuplicates()">🗑 Remover duplicados (${pending.filter(p=>p.type==='vacation').length - Object.keys(vacMap).length} extras)</button>` : ''}
+    </div>
     </div>`;
   } catch (e) { showToast(e.message, 'error'); }
 }
@@ -854,7 +884,11 @@ function showModal(id) {
 
 function closeModal() {
   document.getElementById('modal-overlay').style.display = 'none';
-  document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+  document.querySelectorAll('.modal').forEach(m => {
+    m.style.display = 'none';
+    const errEl = m.querySelector('.modal-error');
+    if (errEl) errEl.style.display = 'none';
+  });
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -869,6 +903,19 @@ function statusPT(s) {
 
 function monthPT(m) {
   return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1];
+}
+
+function showModalError(modalId, msg) {
+  const modal = document.getElementById(modalId);
+  let errEl = modal.querySelector('.modal-error');
+  if (!errEl) {
+    errEl = document.createElement('div');
+    errEl.className = 'modal-error error-msg';
+    errEl.style.marginTop = '12px';
+    modal.querySelector('.modal-footer').before(errEl);
+  }
+  errEl.textContent = msg;
+  errEl.style.display = 'block';
 }
 
 let toastTimer;
