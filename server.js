@@ -59,6 +59,11 @@ const ptHolidays = (year) => {
   ]);
 };
 
+const calcWorkingDaysDecimal = (startStr, endStr, isHalfDay=false, period='full') => {
+  if (isHalfDay) return 0.5;
+  return calcWorkingDays(startStr, endStr);
+};
+
 const calcWorkingDays = (startStr, endStr) => {
   const start = new Date(startStr+'T00:00:00'), end = new Date(endStr+'T00:00:00');
   if (end < start) return 0;
@@ -163,6 +168,9 @@ const initDB = async () => {
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS birthdate DATE`,
     ];
     const extraMigrations = [
+      `ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS is_half_day BOOLEAN DEFAULT false`,
+      `ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS day_period VARCHAR(10) DEFAULT 'full'`,
+      `ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS working_days_decimal DECIMAL(4,1)`,
       `CREATE TABLE IF NOT EXISTS special_days (
         id SERIAL PRIMARY KEY, date DATE NOT NULL UNIQUE,
         name VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL DEFAULT 'holiday',
@@ -342,29 +350,32 @@ app.get('/api/vacations/team', auth, async (req, res) => {
 // Criar pedido
 app.post('/api/vacations', auth, async (req, res) => {
   try {
-    const { start_date, end_date, notes } = req.body;
+    const { start_date, end_date, notes, is_half_day, day_period } = req.body;
+    const halfDay = is_half_day === true || is_half_day === 'true';
+    const period  = halfDay ? (day_period || 'full') : 'full';
+    const endDate = halfDay ? start_date : end_date; // half day = single date
+
     const { rows: ov } = await pool.query(`
       SELECT id FROM vacation_requests WHERE user_id=$1
       AND status IN ('pending','approved') AND start_date<=$3 AND end_date>=$2
-    `, [req.user.id, start_date, end_date]);
+    `, [req.user.id, start_date, endDate]);
     if (ov.length) return res.status(409).json({ error: 'Já existe um pedido que coincide com estas datas.' });
 
-    const working_days = calcWorkingDays(start_date, end_date);
+    const working_days = halfDay ? 0.5 : calcWorkingDays(start_date, endDate);
     if (!working_days) return res.status(400).json({ error: 'O período não tem dias úteis (excluídos fds e feriados PT).' });
 
-    // Check if any day falls on a special holiday
+    // Check holiday blocks
     const { rows: blocked } = await pool.query(
-      `SELECT name FROM special_days
-       WHERE type = 'holiday' AND date BETWEEN $1 AND $2`,
-      [start_date, end_date]
+      `SELECT name FROM special_days WHERE type='holiday' AND date BETWEEN $1 AND $2`,
+      [start_date, endDate]
     );
     if (blocked.length > 0)
       return res.status(400).json({ error: `O período inclui dias bloqueados: ${blocked.map(b=>b.name).join(', ')}` });
 
     const { rows } = await pool.query(
-      `INSERT INTO vacation_requests (user_id,start_date,end_date,working_days,notes)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [req.user.id, start_date, end_date, working_days, notes]
+      `INSERT INTO vacation_requests (user_id,start_date,end_date,working_days,notes,is_half_day,day_period)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.user.id, start_date, endDate, working_days, notes, halfDay, period]
     );
     await pool.query(`INSERT INTO activity_log (user_id,actor_name,action,detail) VALUES ($1,$2,$3,$4)`,
       [req.user.id, req.user.name, 'vacation_submitted',
@@ -380,21 +391,26 @@ app.patch('/api/vacations/:id', auth, async (req, res) => {
     if (!ex[0]) return res.status(404).json({ error: 'Não encontrado' });
     if (req.user.role !== 'admin' && ex[0].user_id !== req.user.id) return res.status(403).json({ error: 'Acesso negado' });
 
-    const { start_date, end_date, notes } = req.body;
+    const { start_date, end_date, notes, is_half_day, day_period } = req.body;
+    const halfDay = is_half_day === true || is_half_day === 'true';
+    const period  = halfDay ? (day_period || 'full') : 'full';
+    const endDate = halfDay ? start_date : end_date;
+
     const { rows: ov } = await pool.query(`
       SELECT id FROM vacation_requests WHERE user_id=$1 AND id!=$4
       AND status IN ('pending','approved') AND start_date<=$3 AND end_date>=$2
-    `, [ex[0].user_id, start_date, end_date, req.params.id]);
+    `, [ex[0].user_id, start_date, endDate, req.params.id]);
     if (ov.length) return res.status(409).json({ error: 'Já existe um pedido que coincide com estas datas.' });
 
-    const working_days = calcWorkingDays(start_date, end_date);
+    const working_days = halfDay ? 0.5 : calcWorkingDays(start_date, endDate);
     if (!working_days) return res.status(400).json({ error: 'O período não tem dias úteis.' });
 
     const { rows } = await pool.query(
       `UPDATE vacation_requests SET start_date=$1,end_date=$2,working_days=$3,notes=$4,
+       is_half_day=$5,day_period=$6,
        status='pending',decided_by=NULL,decided_at=NULL,reject_reason=NULL,
-       version=version+1,updated_at=NOW() WHERE id=$5 RETURNING *`,
-      [start_date, end_date, working_days, notes, req.params.id]
+       version=version+1,updated_at=NOW() WHERE id=$7 RETURNING *`,
+      [start_date, endDate, working_days, notes, halfDay, period, req.params.id]
     );
     await pool.query(`INSERT INTO activity_log (user_id,actor_name,action,detail) VALUES ($1,$2,$3,$4)`,
       [ex[0].user_id, req.user.name, 'vacation_edited',
