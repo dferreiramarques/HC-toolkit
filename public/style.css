@@ -652,3 +652,77 @@ textarea { resize: vertical; min-height: 80px; }
 .text-danger  { color: var(--danger); }
 .mono { font-family: var(--mono); }
 .fw-600 { font-weight: 600; }
+
+/* ─── APPROVE / REJECT BUTTONS ───────────────────────────────────────────── */
+.btn-approve {
+  background: var(--success)20; color: var(--success);
+  border: 1px solid var(--success)40; padding: 6px 12px;
+  border-radius: 6px; font-family: var(--mono); font-size: 12px;
+  font-weight: 600; cursor: pointer; transition: all .15s;
+}
+.btn-approve:hover { background: var(--success); color: #000; }
+
+.btn-reject {
+  background: var(--danger)15; color: var(--danger);
+  border: 1px solid var(--danger)40; padding: 6px 12px;
+  border-radius: 6px; font-family: var(--mono); font-size: 12px;
+  font-weight: 600; cursor: pointer; transition: all .15s;
+}
+.btn-reject:hover { background: var(--danger); color: #fff; }
+
+/* ─── WORKING DAYS PREVIEW ───────────────────────────────────────────────── */
+.working-days-preview {
+  font-size: 12px; font-weight: 500;
+  padding: 8px 12px; margin-bottom: 12px;
+  border-radius: 6px; min-height: 20px;
+  transition: all .2s;
+}
+
+/* ─── VACATION BALANCE BAR ───────────────────────────────────────────────── */
+.balance-bar {
+  display: flex; gap: 24px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.balance-item { display: flex; flex-direction: column; gap: 4px; }
+.balance-val { font-size: 22px; font-weight: 600; line-height: 1; }
+.balance-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+/* ─── BADGE DAYS ─────────────────────────────────────────────────────────── */
+.badge-days {
+  display: inline-block; padding: 2px 7px;
+  background: var(--accent)15; color: var(--accent);
+  border: 1px solid var(--accent)30; border-radius: 4px;
+  font-size: 10px; font-weight: 600;
+}
+
+/* ─── REJECT REASON / VERSION ────────────────────────────────────────────── */
+.reject-reason {
+  color: var(--danger); font-size: 11px;
+  margin-top: 4px; font-style: italic;
+}
+.version-badge {
+  display: inline-block; margin-left: 6px;
+  padding: 1px 5px; background: var(--purple)20;
+  color: var(--purple); border-radius: 3px; font-size: 10px;
+}
+
+/* ─── DECISION DROPDOWN ──────────────────────────────────────────────────── */
+.decision-select {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 10px;
+  cursor: pointer;
+  min-width: 130px;
+  transition: border-color .15s;
+}
+.decision-select:hover { border-color: var(--accent)60; }
+.decision-select:focus { outline: none; border-color: var(--accent); }
+.decision-select option[value="approved"] { color: var(--success); }
+.decision-select option[value="rejected"] { color: var(--danger); }
