@@ -102,7 +102,7 @@ const initDB = async () => {
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         start_date DATE NOT NULL, end_date DATE NOT NULL,
-        working_days INTEGER NOT NULL DEFAULT 0, notes TEXT,
+        working_days DECIMAL(4,1) NOT NULL DEFAULT 0, notes TEXT,
         status VARCHAR(50) DEFAULT 'pending',
         decided_by VARCHAR(255), decided_at TIMESTAMP, reject_reason TEXT,
         version INTEGER DEFAULT 1,
@@ -171,6 +171,7 @@ const initDB = async () => {
       `ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS is_half_day BOOLEAN DEFAULT false`,
       `ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS day_period VARCHAR(10) DEFAULT 'full'`,
       `ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS working_days_decimal DECIMAL(4,1)`,
+      `ALTER TABLE vacation_requests ALTER COLUMN working_days TYPE DECIMAL(4,1)`,
       `CREATE TABLE IF NOT EXISTS special_days (
         id SERIAL PRIMARY KEY, date DATE NOT NULL UNIQUE,
         name VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL DEFAULT 'holiday',
