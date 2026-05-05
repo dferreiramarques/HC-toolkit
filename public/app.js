@@ -51,7 +51,12 @@ async function startApp() {
   document.getElementById('sidebar-avatar').textContent = currentUser.name.charAt(0).toUpperCase();
   document.getElementById('sidebar-name').textContent = currentUser.name.split(' ')[0];
   document.getElementById('sidebar-role').textContent = currentUser.role==='admin' ? 'Administrador' : 'Colaborador';
-  if (currentUser.role==='admin') {
+  // Garantir que nav admin começa sempre escondido
+  document.getElementById('admin-divider').style.display = 'none';
+  document.getElementById('nav-approvals').style.display = 'none';
+  document.getElementById('nav-admin').style.display = 'none';
+
+  if (currentUser.role === 'admin') {
     document.getElementById('admin-divider').style.display = 'block';
     document.getElementById('nav-approvals').style.display = 'flex';
     document.getElementById('nav-admin').style.display = 'flex';
@@ -74,7 +79,14 @@ async function updatePendingBadge() {
 }
 
 // ─── ROUTER ───────────────────────────────────────────────────────────────────
+const adminSections = ['approvals', 'admin'];
+
 function goto(section) {
+  // Block non-admins from admin sections
+  if (adminSections.includes(section) && currentUser?.role !== 'admin') {
+    showToast('Acesso restrito a administradores', 'error');
+    return;
+  }
   document.querySelectorAll('.section').forEach(s => s.style.display='none');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const el = document.getElementById(`section-${section}`);
