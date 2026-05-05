@@ -236,7 +236,7 @@ function setVacMode(mode) {
 
 function setHalfPeriod(p) {
   halfPeriod = p;
-  ['am','full','pm'].forEach(x => document.getElementById('btn-'+x).classList.toggle('active', x===p));
+  ['am','pm'].forEach(x => document.getElementById('btn-'+x).classList.toggle('active', x===p));
   updateWorkingDays();
 }
 
@@ -263,8 +263,8 @@ async function updateWorkingDays() {
   if (vacMode === 'half') {
     const d = document.getElementById('vac-half-date') && document.getElementById('vac-half-date').value;
     if (!d) { el.textContent=''; return; }
-    const labels = {am:'Manhã (0.5 dias úteis)', full:'Dia completo (1 dia útil)', pm:'Tarde (0.5 dias úteis)'};
-    el.textContent = labels[halfPeriod]; el.style.color='var(--accent)'; return;
+    const labels = {am:'Manhã (0.5 dias úteis)', pm:'Tarde (0.5 dias úteis)'};
+    el.textContent = labels[halfPeriod] || '0.5 dias úteis'; el.style.color='var(--accent)'; return;
   }
   const start = document.getElementById('vac-start') && document.getElementById('vac-start').value;
   const end   = document.getElementById('vac-end') && document.getElementById('vac-end').value;
@@ -284,8 +284,7 @@ async function submitVacation() {
   if (vacMode === 'half') {
     const date = document.getElementById('vac-half-date').value;
     if (!date) return showModalError('modal-vacation','Escolhe uma data.');
-    const isFullDay = halfPeriod === 'full';
-    body = { start_date:date, end_date:date, notes, is_half_day:!isFullDay, day_period:halfPeriod };
+    body = { start_date:date, end_date:date, notes, is_half_day:true, day_period:halfPeriod };
   } else {
     const start = document.getElementById('vac-start').value;
     const end   = document.getElementById('vac-end').value;
