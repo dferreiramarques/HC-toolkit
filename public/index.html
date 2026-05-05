@@ -196,7 +196,7 @@
       <div class="form-group">
         <label>Tipo de marcação</label>
         <div class="toggle-group">
-          <button class="toggle-btn active" id="btn-multiday" onclick="setVacMode('multi')">📅 Vários dias</button>
+          <button class="toggle-btn active" id="btn-multiday" onclick="setVacMode('multi')">📅 Dias inteiros</button>
           <button class="toggle-btn" id="btn-halfday" onclick="setVacMode('half')">🕐 Meio dia</button>
         </div>
       </div>
@@ -349,6 +349,16 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<div id="confirm-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:#00000090;align-items:center;justify-content:center;backdrop-filter:blur(4px)">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:28px 32px;max-width:400px;width:90%;text-align:center">
+    <p id="confirm-msg" style="font-size:14px;color:var(--text);margin-bottom:24px;line-height:1.6"></p>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="btn btn-ghost" onclick="confirmNo()">Cancelar</button>
+      <button class="btn btn-danger" onclick="confirmYes()" style="background:var(--danger);color:#fff;border:none">Confirmar</button>
+    </div>
   </div>
 </div>
 
