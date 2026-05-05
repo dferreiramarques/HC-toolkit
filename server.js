@@ -328,6 +328,14 @@ app.delete('/api/projects/:id', auth, adminOnly, async (req, res) => {
   res.json({ success: true });
 });
 
+// Hard delete all projects with no timesheet entries (admin cleanup)
+app.delete('/api/projects', auth, adminOnly, async (req, res) => {
+  const { rows } = await pool.query(
+    `DELETE FROM projects WHERE id NOT IN (SELECT DISTINCT project_id FROM timesheets WHERE project_id IS NOT NULL) RETURNING id`
+  );
+  res.json({ deleted: rows.length });
+});
+
 // ─── VACATIONS ────────────────────────────────────────────────────────────────
 app.get('/api/vacations', auth, async (req, res) => {
   const isAdmin = req.user.role === 'admin';
