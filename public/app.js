@@ -18,9 +18,26 @@ const api = async (method, path, body=null) => {
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(path, opts);
   const data = await res.json().catch(()=>({}));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok) {
+    // Sessão expirada ou token inválido: sair de imediato em vez de encadear
+    // erros em todas as secções (evita a app ficar "presa" num estado partido).
+    if (res.status === 401 && path !== '/api/auth/login') {
+      sessionExpired();
+      throw new Error('Sessão expirada');
+    }
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
   return data;
 };
+
+let sessionExpiredHandled = false;
+function sessionExpired() {
+  if (sessionExpiredHandled) return;
+  sessionExpiredHandled = true;
+  logout();
+  document.getElementById('login-error').textContent = 'A tua sessão expirou. Inicia sessão novamente.';
+  document.getElementById('login-error').style.display = 'block';
+}
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 async function login() {
@@ -33,6 +50,7 @@ async function login() {
     token = data.token; currentUser = data.user;
     localStorage.setItem('cicf_token', token);
     localStorage.setItem('cicf_user', JSON.stringify(currentUser));
+    sessionExpiredHandled = false;
     startApp();
   } catch(e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
 }
