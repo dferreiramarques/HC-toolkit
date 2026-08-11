@@ -3,28 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CICF OPS</title>
+  <title>HR MONCO</title>
+  <meta name="theme-color" content="#f59e0b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
 <div id="login-screen">
   <div class="login-card">
-    <div class="login-brand"><span class="login-logo">◈</span><span>CICF OPS</span></div>
+    <div class="login-brand"><span class="login-logo">◈</span><span>HR MONCO</span></div>
     <p class="login-sub">Sistema de Gestão Interna</p>
     <div class="form-group"><label>Email</label><input type="email" id="login-email" placeholder="utilizador@cicf.pt" autocomplete="email"></div>
     <div class="form-group"><label>Password</label><input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password"></div>
     <button class="btn btn-primary btn-full" onclick="login()">Entrar</button>
     <div id="login-error" class="error-msg" style="display:none"></div>
     <p class="login-brand-footer">CDI Portugal · Norte 2030</p>
+    <p class="credit-footer">vibe coded by <a href="https://www.linkedin.com/in/dferreiramarques/" target="_blank" rel="noopener">David Marques</a> · <a href="https://ko-fi.com/dferreiramarques" target="_blank" rel="noopener">☕ ko-fi</a></p>
   </div>
 </div>
 
 <div id="app" style="display:none">
   <aside id="sidebar">
-    <div class="sidebar-header"><span class="sidebar-logo">◈</span><span class="sidebar-title">CICF OPS</span></div>
+    <div class="sidebar-header"><span class="sidebar-logo">◈</span><span class="sidebar-title">HR MONCO</span></div>
     <nav class="sidebar-nav">
       <a class="nav-item active" data-section="dashboard" onclick="goto('dashboard')"><span class="nav-icon">◧</span>Dashboard</a>
       <a class="nav-item" data-section="vacations" onclick="goto('vacations')"><span class="nav-icon">◫</span>Férias</a>
@@ -364,5 +370,12 @@
 
 <div id="toast" class="toast"></div>
 <script src="app.js?v=3"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+</script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-# CICF OPS
+# HR MONCO
 
 Sistema interno de gestão para o Centro de Inovação Carlos Fiolhais.
 
@@ -51,7 +51,7 @@ SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=cicf@gmail.com
 SMTP_PASS=app-password-do-gmail
-SMTP_FROM=CICF OPS <cicf@gmail.com>
+SMTP_FROM=HR MONCO <cicf@gmail.com>
 ```
 
 > **Nota:** Se `SMTP_HOST` não estiver definido, os emails são apenas simulados no log (útil para desenvolvimento).

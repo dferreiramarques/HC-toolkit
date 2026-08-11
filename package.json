@@ -1,7 +1,7 @@
 {
   "name": "cicf-ops",
   "version": "1.0.0",
-  "description": "Sistema interno de gestão CICF - férias, compras, horários, folha de horas",
+  "description": "HR MONCO - Sistema interno de gestão CICF - férias, compras, horários, folha de horas",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

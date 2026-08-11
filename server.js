@@ -35,8 +35,8 @@ const sendEmail = (to, subject, html) => {
 const notifyEmail = (to, subject, body) => sendEmail(to, subject,
   `<div style="font-family:monospace;background:#0f1117;color:#e2e8f0;padding:32px;max-width:520px;border-radius:8px">
     ${body}<br><br>
-    <a href="${BASE_URL}" style="color:#f59e0b">Aceder ao CICF OPS →</a>
-    <p style="color:#475569;font-size:11px;margin-top:24px">CICF OPS · CDI Portugal</p>
+    <a href="${BASE_URL}" style="color:#f59e0b">Aceder ao HR MONCO →</a>
+    <p style="color:#475569;font-size:11px;margin-top:24px">HR MONCO · CDI Portugal</p>
   </div>`
 );
 
@@ -455,7 +455,7 @@ app.post('/api/vacations/:id/decide', auth, adminOnly, async (req, res) => {
     const end   = new Date(ex[0].end_date).toLocaleDateString('pt-PT');
     const label = decision==='approved' ? 'APROVADO' : 'RECUSADO';
     const color = decision==='approved' ? '#10b981' : '#ef4444';
-    notifyEmail(ex[0].user_email, `[CICF OPS] Férias ${label}`,
+    notifyEmail(ex[0].user_email, `[HR MONCO] Férias ${label}`,
       `<h2 style="color:${color}">${label === 'APROVADO' ? '✓' : '✗'} Férias ${label}</h2>
        <p>${start} → ${end} (${ex[0].working_days} dias úteis) — decidido por <strong>${req.user.name}</strong></p>
        ${reject_reason ? `<p><strong>Motivo:</strong> ${reject_reason}</p>` : ''}
@@ -703,7 +703,7 @@ app.get('*', (req, res) => {
 });
 
 // ─── START ────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`CICF OPS na porta ${PORT}`));
+app.listen(PORT, () => console.log(`HR MONCO na porta ${PORT}`));
 const startDB = async (n=1) => {
   try { await initDB(); console.log(`✓ BD pronta — ${BASE_URL}`); }
   catch (e) {
