@@ -35,8 +35,8 @@ const sendEmail = (to, subject, html) => {
 const notifyEmail = (to, subject, body) => sendEmail(to, subject,
   `<div style="font-family:monospace;background:#0f1117;color:#e2e8f0;padding:32px;max-width:520px;border-radius:8px">
     ${body}<br><br>
-    <a href="${BASE_URL}" style="color:#f59e0b">Aceder ao HR MONCO →</a>
-    <p style="color:#475569;font-size:11px;margin-top:24px">HR MONCO · CDI Portugal</p>
+    <a href="${BASE_URL}" style="color:#f59e0b">Aceder ao CICF OPS →</a>
+    <p style="color:#475569;font-size:11px;margin-top:24px">CICF OPS · CDI Portugal</p>
   </div>`
 );
 
@@ -57,11 +57,6 @@ const ptHolidays = (year) => {
     `${year}-08-15`, `${year}-10-05`, `${year}-11-01`,
     `${year}-12-01`, `${year}-12-08`, `${year}-12-25`
   ]);
-};
-
-const calcWorkingDaysDecimal = (startStr, endStr, isHalfDay=false, period='full') => {
-  if (isHalfDay) return 0.5;
-  return calcWorkingDays(startStr, endStr);
 };
 
 const calcWorkingDays = (startStr, endStr) => {
@@ -102,7 +97,7 @@ const initDB = async () => {
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         start_date DATE NOT NULL, end_date DATE NOT NULL,
-        working_days DECIMAL(4,1) NOT NULL DEFAULT 0, notes TEXT,
+        working_days INTEGER NOT NULL DEFAULT 0, notes TEXT,
         status VARCHAR(50) DEFAULT 'pending',
         decided_by VARCHAR(255), decided_at TIMESTAMP, reject_reason TEXT,
         version INTEGER DEFAULT 1,
@@ -138,16 +133,6 @@ const initDB = async () => {
         actor_name VARCHAR(255), action VARCHAR(100) NOT NULL, detail JSONB,
         created_at TIMESTAMP DEFAULT NOW()
       );
-      CREATE TABLE IF NOT EXISTS special_days (
-        id SERIAL PRIMARY KEY,
-        date DATE NOT NULL UNIQUE,
-        name VARCHAR(255) NOT NULL,
-        type VARCHAR(50) NOT NULL DEFAULT 'holiday',
-        description TEXT,
-        created_by VARCHAR(255),
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-
       CREATE TABLE IF NOT EXISTS timesheets (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -167,18 +152,6 @@ const initDB = async () => {
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS contract_start DATE`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS birthdate DATE`,
     ];
-    const extraMigrations = [
-      `ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS is_half_day BOOLEAN DEFAULT false`,
-      `ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS day_period VARCHAR(10) DEFAULT 'full'`,
-      `ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS working_days_decimal DECIMAL(4,1)`,
-      `ALTER TABLE vacation_requests ALTER COLUMN working_days TYPE DECIMAL(4,1)`,
-      `CREATE TABLE IF NOT EXISTS special_days (
-        id SERIAL PRIMARY KEY, date DATE NOT NULL UNIQUE,
-        name VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL DEFAULT 'holiday',
-        description TEXT, created_by VARCHAR(255), created_at TIMESTAMP DEFAULT NOW()
-      )`,
-    ];
-    for (const m of extraMigrations) await client.query(m).catch(() => {});
     for (const m of migrations) await client.query(m).catch(() => {});
 
     await client.query(`INSERT INTO projects (name,code) VALUES
@@ -200,16 +173,17 @@ const initDB = async () => {
 // ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
 app.use(express.json());
 
-// Servir JS e CSS sempre frescos (sem cache)
-app.use(express.static(path.join(__dirname, 'public'), {
-  etag: false,
-  lastModified: false,
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
-      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-    }
-  }
-}));
+// Serve JS and CSS with no-cache headers so updates are always picked up
+app.get('/app.js', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public', 'app.js'));
+});
+app.get('/style.css', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public', 'style.css'));
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
 
 const auth = (req, res, next) => {
   const t = req.headers.authorization?.split(' ')[1];
@@ -328,14 +302,6 @@ app.delete('/api/projects/:id', auth, adminOnly, async (req, res) => {
   res.json({ success: true });
 });
 
-// Hard delete all projects with no timesheet entries (admin cleanup)
-app.delete('/api/projects', auth, adminOnly, async (req, res) => {
-  const { rows } = await pool.query(
-    `DELETE FROM projects WHERE id NOT IN (SELECT DISTINCT project_id FROM timesheets WHERE project_id IS NOT NULL) RETURNING id`
-  );
-  res.json({ deleted: rows.length });
-});
-
 // ─── VACATIONS ────────────────────────────────────────────────────────────────
 app.get('/api/vacations', auth, async (req, res) => {
   const isAdmin = req.user.role === 'admin';
@@ -359,32 +325,20 @@ app.get('/api/vacations/team', auth, async (req, res) => {
 // Criar pedido
 app.post('/api/vacations', auth, async (req, res) => {
   try {
-    const { start_date, end_date, notes, is_half_day, day_period } = req.body;
-    const halfDay = is_half_day === true || is_half_day === 'true';
-    const period  = halfDay ? (day_period || 'full') : 'full';
-    const endDate = halfDay ? start_date : end_date; // half day = single date
-
+    const { start_date, end_date, notes } = req.body;
     const { rows: ov } = await pool.query(`
       SELECT id FROM vacation_requests WHERE user_id=$1
       AND status IN ('pending','approved') AND start_date<=$3 AND end_date>=$2
-    `, [req.user.id, start_date, endDate]);
+    `, [req.user.id, start_date, end_date]);
     if (ov.length) return res.status(409).json({ error: 'Já existe um pedido que coincide com estas datas.' });
 
-    const working_days = halfDay ? 0.5 : calcWorkingDays(start_date, endDate);
+    const working_days = calcWorkingDays(start_date, end_date);
     if (!working_days) return res.status(400).json({ error: 'O período não tem dias úteis (excluídos fds e feriados PT).' });
 
-    // Check holiday blocks
-    const { rows: blocked } = await pool.query(
-      `SELECT name FROM special_days WHERE type='holiday' AND date BETWEEN $1 AND $2`,
-      [start_date, endDate]
-    );
-    if (blocked.length > 0)
-      return res.status(400).json({ error: `O período inclui dias bloqueados: ${blocked.map(b=>b.name).join(', ')}` });
-
     const { rows } = await pool.query(
-      `INSERT INTO vacation_requests (user_id,start_date,end_date,working_days,notes,is_half_day,day_period)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [req.user.id, start_date, endDate, working_days, notes, halfDay, period]
+      `INSERT INTO vacation_requests (user_id,start_date,end_date,working_days,notes)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [req.user.id, start_date, end_date, working_days, notes]
     );
     await pool.query(`INSERT INTO activity_log (user_id,actor_name,action,detail) VALUES ($1,$2,$3,$4)`,
       [req.user.id, req.user.name, 'vacation_submitted',
@@ -400,26 +354,21 @@ app.patch('/api/vacations/:id', auth, async (req, res) => {
     if (!ex[0]) return res.status(404).json({ error: 'Não encontrado' });
     if (req.user.role !== 'admin' && ex[0].user_id !== req.user.id) return res.status(403).json({ error: 'Acesso negado' });
 
-    const { start_date, end_date, notes, is_half_day, day_period } = req.body;
-    const halfDay = is_half_day === true || is_half_day === 'true';
-    const period  = halfDay ? (day_period || 'full') : 'full';
-    const endDate = halfDay ? start_date : end_date;
-
+    const { start_date, end_date, notes } = req.body;
     const { rows: ov } = await pool.query(`
       SELECT id FROM vacation_requests WHERE user_id=$1 AND id!=$4
       AND status IN ('pending','approved') AND start_date<=$3 AND end_date>=$2
-    `, [ex[0].user_id, start_date, endDate, req.params.id]);
+    `, [ex[0].user_id, start_date, end_date, req.params.id]);
     if (ov.length) return res.status(409).json({ error: 'Já existe um pedido que coincide com estas datas.' });
 
-    const working_days = halfDay ? 0.5 : calcWorkingDays(start_date, endDate);
+    const working_days = calcWorkingDays(start_date, end_date);
     if (!working_days) return res.status(400).json({ error: 'O período não tem dias úteis.' });
 
     const { rows } = await pool.query(
       `UPDATE vacation_requests SET start_date=$1,end_date=$2,working_days=$3,notes=$4,
-       is_half_day=$5,day_period=$6,
        status='pending',decided_by=NULL,decided_at=NULL,reject_reason=NULL,
-       version=version+1,updated_at=NOW() WHERE id=$7 RETURNING *`,
-      [start_date, endDate, working_days, notes, halfDay, period, req.params.id]
+       version=version+1,updated_at=NOW() WHERE id=$5 RETURNING *`,
+      [start_date, end_date, working_days, notes, req.params.id]
     );
     await pool.query(`INSERT INTO activity_log (user_id,actor_name,action,detail) VALUES ($1,$2,$3,$4)`,
       [ex[0].user_id, req.user.name, 'vacation_edited',
@@ -455,7 +404,7 @@ app.post('/api/vacations/:id/decide', auth, adminOnly, async (req, res) => {
     const end   = new Date(ex[0].end_date).toLocaleDateString('pt-PT');
     const label = decision==='approved' ? 'APROVADO' : 'RECUSADO';
     const color = decision==='approved' ? '#10b981' : '#ef4444';
-    notifyEmail(ex[0].user_email, `[HR MONCO] Férias ${label}`,
+    notifyEmail(ex[0].user_email, `[CICF OPS] Férias ${label}`,
       `<h2 style="color:${color}">${label === 'APROVADO' ? '✓' : '✗'} Férias ${label}</h2>
        <p>${start} → ${end} (${ex[0].working_days} dias úteis) — decidido por <strong>${req.user.name}</strong></p>
        ${reject_reason ? `<p><strong>Motivo:</strong> ${reject_reason}</p>` : ''}
@@ -634,40 +583,6 @@ app.delete('/api/timesheets/:id', auth, async (req, res) => {
   res.json({ success: true });
 });
 
-// ─── SPECIAL DAYS ────────────────────────────────────────────────────────────
-app.get('/api/special-days', auth, async (req, res) => {
-  const { year } = req.query;
-  let q = 'SELECT * FROM special_days';
-  const params = [];
-  if (year) { q += ' WHERE EXTRACT(YEAR FROM date) = $1'; params.push(year); }
-  q += ' ORDER BY date ASC';
-  const { rows } = await pool.query(q, params);
-  res.json(rows);
-});
-
-app.post('/api/special-days', auth, adminOnly, async (req, res) => {
-  try {
-    const { date, name, type, description } = req.body;
-    if (!date || !name) return res.status(400).json({ error: 'Data e nome obrigatórios' });
-    if (!['holiday','cdi_event'].includes(type))
-      return res.status(400).json({ error: 'Tipo inválido' });
-    const { rows } = await pool.query(
-      `INSERT INTO special_days (date, name, type, description, created_by)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [date, name, type, description || null, req.user.name]
-    );
-    res.json(rows[0]);
-  } catch (e) {
-    if (e.code === '23505') return res.status(409).json({ error: 'Já existe um dia especial nesta data' });
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.delete('/api/special-days/:id', auth, adminOnly, async (req, res) => {
-  await pool.query('DELETE FROM special_days WHERE id = $1', [req.params.id]);
-  res.json({ success: true });
-});
-
 // ─── PENDING ──────────────────────────────────────────────────────────────────
 app.get('/api/pending', auth, adminOnly, async (req, res) => {
   const [v,p,s] = await Promise.all([
@@ -703,7 +618,7 @@ app.get('*', (req, res) => {
 });
 
 // ─── START ────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`HR MONCO na porta ${PORT}`));
+app.listen(PORT, () => console.log(`CICF OPS na porta ${PORT}`));
 const startDB = async (n=1) => {
   try { await initDB(); console.log(`✓ BD pronta — ${BASE_URL}`); }
   catch (e) {
